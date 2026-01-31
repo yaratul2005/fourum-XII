@@ -12,7 +12,7 @@ if (!defined('NO_CACHE') && !headers_sent()) {
 
 // Get admin-controlled header settings
 $header_title = get_setting('header_title', 'FUROM');
-$header_subtitle = get_setting('header_subtitle', 'Futuristic Community Platform');
+$header_subtitle = get_setting('header_subtitle', 'The next-generation community platform built for the future.');
 $show_header_logo = filter_var(get_setting('show_header_logo', true), FILTER_VALIDATE_BOOLEAN);
 $header_custom_css = get_setting('header_custom_css', '');
 

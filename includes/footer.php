@@ -2,7 +2,7 @@
 require_once 'cookie-manager.php';
 
 // Get admin-controlled footer settings
-$footer_text = get_setting('footer_text', '© 2024 Furom. All rights reserved.');
+$footer_text = get_setting('footer_text', '© 2026 Furom. All rights reserved.');
 $footer_custom_html = get_setting('footer_custom_html', '');
 $custom_footer_html = get_site_appearance('custom_footer_html', '');
 ?>
@@ -10,71 +10,134 @@ $custom_footer_html = get_site_appearance('custom_footer_html', '');
 <footer class="cyber-footer">
     <div class="container">
         <div class="footer-content">
-            <?php if (!empty($custom_footer_html)): ?>
-                <div class="custom-footer-content">
-                    <?php echo $custom_footer_html; ?>
-                </div>
-            <?php endif; ?>
+            <!-- Quick Links Section -->
+            <div class="footer-section footer-quick-links">
+                <h3><i class="fas fa-link"></i> Quick Links</h3>
+                <ul>
+                    <li><a href="about.php">About</a></li>
+                    <li><a href="community-rules.php">Community Rules</a></li>
+                    <li><a href="privacy.php">Privacy Policy</a></li>
+                    <li><a href="whats-new.php">What's New (V2)</a></li>
+                </ul>
+            </div>
             
-            <div class="footer-info">
-                <p><?php echo $footer_text; ?></p>
-                <div class="footer-links">
-                    <a href="about.php">About</a>
-                    <a href="privacy.php">Privacy</a>
-                    <a href="terms.php">Terms</a>
-                    <a href="contact.php">Contact</a>
+            <!-- Connect Section -->
+            <div class="footer-section footer-connect">
+                <h3><i class="fas fa-plug"></i> Connect</h3>
+                <div class="social-links">
+                    <a href="#" title="Twitter"><i class="fab fa-twitter"></i></a>
+                    <a href="#" title="Discord"><i class="fab fa-discord"></i></a>
+                    <a href="#" title="GitHub"><i class="fab fa-github"></i></a>
                 </div>
             </div>
             
-            <?php if (!empty($footer_custom_html)): ?>
-                <div class="admin-footer-content">
-                    <?php echo $footer_custom_html; ?>
-                </div>
-            <?php endif; ?>
+            <!-- Copyright Section -->
+            <div class="footer-section">
+                <p class="footer-bottom">
+                    <?php echo $footer_text; ?>
+                </p>
+            </div>
         </div>
     </div>
 </footer>
 
 <style>
-.footer-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-    text-align: center;
+/* Footer-specific styling */
+.footer-quick-links h3, .footer-connect h3 {
+    margin-bottom: 1.2rem;
+    font-size: 1.2rem;
+    color: var(--primary);
 }
 
-.footer-info {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
+.footer-quick-links ul {
+    list-style: none;
+    padding: 0;
 }
 
-.footer-links {
+.footer-quick-links li {
+    margin-bottom: 0.8rem;
+}
+
+.footer-quick-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    display: block;
+    padding: 0.5rem 0;
+    transition: all 0.2s ease;
+}
+
+.footer-quick-links a:hover {
+    color: var(--primary);
+    padding-left: 5px;
+}
+
+.footer-connect h3 {
+    margin-bottom: 1.2rem;
+    font-size: 1.2rem;
+    color: var(--primary);
+}
+
+.social-links {
     display: flex;
-    gap: 1.5rem;
-    flex-wrap: wrap;
+    gap: 1.25rem;
     justify-content: center;
 }
 
-.footer-links a {
+.social-links a {
     color: var(--text-secondary);
-    text-decoration: none;
+    font-size: 1.75rem;
     transition: all 0.3s ease;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
+    position: relative;
 }
 
-.footer-links a:hover {
+.social-links a:hover {
     color: var(--primary);
-    background: rgba(0, 245, 255, 0.1);
+    transform: translateY(-3px) scale(1.1);
 }
 
-.custom-footer-content,
-.admin-footer-content {
-    width: 100%;
-    text-align: center;
+.social-links a::before {
+    content: '';
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    right: -5px;
+    bottom: -5px;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    transition: all 0.3s ease;
+}
+
+.social-links a:hover::before {
+    border-color: var(--primary);
+    box-shadow: 0 0 15px var(--primary);
+}
+
+/* Responsive design for mobile */
+@media (max-width: 768px) {
+    .footer-content {
+        flex-direction: column;
+        gap: 2rem;
+        padding: 2rem 1rem;
+    }
+    
+    .footer-section {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .footer-quick-links ul {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .footer-quick-links li {
+        margin: 0.5rem 0;
+    }
+    
+    .social-links {
+        justify-content: center;
+    }
 }
 </style>
 
@@ -106,53 +169,4 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
-
-// Performance monitoring
-if ('performance' in window) {
-    window.addEventListener('load', function() {
-        setTimeout(function() {
-            const perfData = performance.getEntriesByType('navigation')[0];
-            if (perfData) {
-                console.log('Page Load Metrics:', {
-                    'DNS Lookup': perfData.domainLookupEnd - perfData.domainLookupStart,
-                    'TCP Connection': perfData.connectEnd - perfData.connectStart,
-                    'Request Time': perfData.responseEnd - perfData.requestStart,
-                    'DOM Processing': perfData.domContentLoadedEventEnd - perfData.domContentLoadedEventStart,
-                    'Total Load': perfData.loadEventEnd - perfData.loadEventStart
-                });
-            }
-        }, 0);
-    });
-}
-
-// Cache management utilities
-window.furom.cache = {
-    clearAll: function() {
-        if ('caches' in window) {
-            caches.keys().then(function(cacheNames) {
-                return Promise.all(
-                    cacheNames.map(function(cacheName) {
-                        return caches.delete(cacheName);
-                    })
-                );
-            }).then(function() {
-                console.log('All caches cleared');
-                if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({action: 'clearCache'});
-                }
-            });
-        }
-    },
-    
-    getStats: function() {
-        if ('storage' in navigator && 'estimate' in navigator.storage) {
-            navigator.storage.estimate().then(function(estimate) {
-                console.log('Storage usage:', {
-                    used: Math.round(estimate.usage / 1024 / 1024) + ' MB',
-                    available: Math.round(estimate.quota / 1024 / 1024) + ' MB'
-                });
-            });
-        }
-    }
-};
 </script>
