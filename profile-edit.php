@@ -1,5 +1,5 @@
 <?php
-// Enhanced Profile Editor with Image Upload
+// Enhanced Profile Editor with Improved Image Upload and Validation
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -29,6 +29,7 @@ try {
     
     $message = '';
     $message_type = '';
+    $upload_errors = [];
     
     // Handle profile updates
     if (isset($_POST['update_profile'])) {
@@ -36,38 +37,70 @@ try {
             $updates = [];
             $params = [];
             
-            // Handle avatar upload
+            // Handle avatar upload with better error handling
             if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
-                $upload_result = handle_avatar_upload($_FILES['avatar'], $user_id);
+                $upload_result = handle_avatar_upload_improved($_FILES['avatar'], $user_id);
                 if ($upload_result['success']) {
                     $updates[] = "avatar = ?";
                     $params[] = $upload_result['filename'];
                     $message .= 'Avatar updated successfully. ';
                     $message_type = 'success';
                 } else {
-                    $message .= 'Avatar upload failed: ' . $upload_result['error'] . ' ';
-                    $message_type = 'error';
+                    $upload_errors[] = $upload_result['error'];
                 }
+            } elseif (isset($_FILES['avatar']) && $_FILES['avatar']['error'] !== UPLOAD_ERR_NO_FILE) {
+                // Handle upload errors
+                $upload_errors[] = get_upload_error_message($_FILES['avatar']['error']);
             }
             
-            // Handle other profile fields
-            $allowed_fields = ['bio', 'website', 'location', 'signature'];
-            foreach ($allowed_fields as $field) {
-                if (isset($_POST[$field])) {
-                    $value = trim($_POST[$field]);
-                    if ($field === 'website' && !empty($value) && !filter_var($value, FILTER_VALIDATE_URL)) {
-                        throw new Exception('Invalid website URL');
-                    }
-                    $updates[] = "$field = ?";
-                    $params[] = $value;
+            // Handle bio update
+            if (isset($_POST['bio'])) {
+                $bio = trim($_POST['bio']);
+                if (strlen($bio) > 500) {
+                    throw new Exception('Bio must be 500 characters or less');
                 }
+                $updates[] = "bio = ?";
+                $params[] = $bio;
             }
             
-            // Update username (with uniqueness check)
+            // Handle website update
+            if (isset($_POST['website'])) {
+                $website = trim($_POST['website']);
+                if (!empty($website) && !filter_var($website, FILTER_VALIDATE_URL)) {
+                    throw new Exception('Invalid website URL format');
+                }
+                $updates[] = "website = ?";
+                $params[] = $website;
+            }
+            
+            // Handle location update
+            if (isset($_POST['location'])) {
+                $location = trim($_POST['location']);
+                if (strlen($location) > 100) {
+                    throw new Exception('Location must be 100 characters or less');
+                }
+                $updates[] = "location = ?";
+                $params[] = $location;
+            }
+            
+            // Handle signature update
+            if (isset($_POST['signature'])) {
+                $signature = trim($_POST['signature']);
+                if (strlen($signature) > 300) {
+                    throw new Exception('Signature must be 300 characters or less');
+                }
+                $updates[] = "signature = ?";
+                $params[] = $signature;
+            }
+            
+            // Update username with better validation
             if (isset($_POST['username']) && $_POST['username'] !== $user_data['username']) {
                 $new_username = sanitize_input($_POST['username']);
                 if (strlen($new_username) < 3 || strlen($new_username) > 30) {
                     throw new Exception('Username must be between 3 and 30 characters');
+                }
+                if (!preg_match('/^[a-zA-Z0-9_]+$/', $new_username)) {
+                    throw new Exception('Username can only contain letters, numbers, and underscores');
                 }
                 
                 // Check uniqueness
@@ -81,28 +114,40 @@ try {
                 $params[] = $new_username;
                 $message .= 'Username updated successfully. ';
                 $message_type = 'success';
+                
+                // Update session username
+                $_SESSION['username'] = $new_username;
             }
             
             if (!empty($updates)) {
                 $params[] = $user_id;
                 $sql = "UPDATE users SET " . implode(', ', $updates) . " WHERE id = ?";
                 $stmt = $pdo->prepare($sql);
-                $stmt->execute($params);
                 
-                if (empty($message)) {
-                    $message = 'Profile updated successfully!';
-                    $message_type = 'success';
+                if ($stmt->execute($params)) {
+                    if (empty($message)) {
+                        $message = 'Profile updated successfully!';
+                        $message_type = 'success';
+                    }
+                } else {
+                    throw new Exception('Failed to update profile');
                 }
-            } else if (empty($message)) {
+            } else if (empty($message) && empty($upload_errors)) {
                 $message = 'No changes made to profile.';
                 $message_type = 'info';
+            }
+            
+            // Handle upload errors
+            if (!empty($upload_errors)) {
+                $message .= 'Upload errors: ' . implode(', ', $upload_errors);
+                $message_type = $message_type === 'success' ? 'warning' : 'error';
             }
             
             // Refresh user data
             $user_data = get_user_data($user_id);
             
         } catch (Exception $e) {
-            $message = 'Error: ' . $e->getMessage();
+            $message = 'Error updating profile: ' . $e->getMessage();
             $message_type = 'error';
         }
     }
@@ -114,12 +159,11 @@ try {
             $new_password = $_POST['new_password'] ?? '';
             $confirm_password = $_POST['confirm_password'] ?? '';
             
-            // Verify current password
-            if (!password_verify($current_password, $user_data['password'])) {
-                throw new Exception('Current password is incorrect');
+            // Validate passwords
+            if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
+                throw new Exception('All password fields are required');
             }
             
-            // Validate new password
             if (strlen($new_password) < 8) {
                 throw new Exception('New password must be at least 8 characters long');
             }
@@ -128,22 +172,30 @@ try {
                 throw new Exception('New passwords do not match');
             }
             
+            // Verify current password
+            if (!password_verify($current_password, $user_data['password'])) {
+                throw new Exception('Current password is incorrect');
+            }
+            
             // Update password
             $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
             $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
-            $stmt->execute([$hashed_password, $user_id]);
-            
-            $message = 'Password changed successfully!';
-            $message_type = 'success';
+            if ($stmt->execute([$hashed_password, $user_id])) {
+                $message = 'Password changed successfully!';
+                $message_type = 'success';
+            } else {
+                throw new Exception('Failed to change password');
+            }
             
         } catch (Exception $e) {
-            $message = 'Password change error: ' . $e->getMessage();
+            $message = 'Error changing password: ' . $e->getMessage();
             $message_type = 'error';
         }
     }
     
 } catch (Exception $e) {
-    $fatal_error = $e->getMessage();
+    $message = 'System error: ' . $e->getMessage();
+    $message_type = 'error';
 }
 
 ob_end_flush();
@@ -154,41 +206,10 @@ ob_end_flush();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Profile - <?php echo htmlspecialchars($user_data['username'] ?? 'User'); ?></title>
+    <title>Edit Profile - <?php echo htmlspecialchars($user_data['username']); ?></title>
     <link rel="stylesheet" href="assets/css/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        /* Cyberpunk Theme Integration */
-        :root {
-            --cyber-primary: #00f5ff;
-            --cyber-secondary: #ff00ff;
-            --cyber-accent: #ff6b6b;
-            --cyber-dark: #0a0a1a;
-            --cyber-darker: #050510;
-            --cyber-card: #121225;
-            --cyber-text: #ffffff;
-            --cyber-text-secondary: #a0a0c0;
-            --cyber-border: #2a2a4a;
-            --cyber-success: #00ff9d;
-            --cyber-warning: #ffcc00;
-            --cyber-danger: #ff4757;
-            --cyber-neon: 0 0 10px var(--cyber-primary), 0 0 20px var(--cyber-primary), 0 0 30px var(--cyber-primary);
-        }
-        
-        body {
-            font-family: 'Exo 2', sans-serif;
-            background: var(--cyber-dark);
-            background-image: 
-                radial-gradient(circle at 10% 20%, rgba(0, 245, 255, 0.1) 0%, transparent 20%),
-                radial-gradient(circle at 90% 80%, rgba(255, 0, 255, 0.1) 0%, transparent 20%);
-            color: var(--cyber-text);
-            line-height: 1.6;
-            min-height: 100vh;
-            overflow-x: hidden;
-            margin: 0;
-            padding: 0;
-        }
-        
         .profile-edit-container {
             max-width: 800px;
             margin: 2rem auto;
@@ -198,48 +219,18 @@ ob_end_flush();
         .profile-header {
             text-align: center;
             margin-bottom: 2rem;
-            animation: fadeInDown 0.8s ease-out;
         }
         
-        @keyframes fadeInDown {
-            from {
-                opacity: 0;
-                transform: translateY(-30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        .avatar-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 2rem;
         }
         
-        .profile-header h1 {
-            font-family: 'Orbitron', monospace;
-            font-size: 2.5rem;
-            font-weight: 700;
-            background: linear-gradient(45deg, var(--cyber-primary), var(--cyber-secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-shadow: var(--cyber-neon);
-            margin-bottom: 0.5rem;
-        }
-        
-        .profile-header p {
-            color: var(--cyber-text-secondary);
-            font-size: 1.1rem;
-        }
-        
-        .avatar-upload {
+        .avatar-preview-container {
             position: relative;
-            display: inline-block;
             margin-bottom: 1rem;
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
         }
         
         .avatar-preview {
@@ -247,16 +238,14 @@ ob_end_flush();
             height: 150px;
             border-radius: 50%;
             object-fit: cover;
-            border: 3px solid var(--cyber-primary);
+            border: 3px solid var(--primary);
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
         }
         
         .avatar-preview:hover {
-            transform: scale(1.1);
-            border-color: var(--cyber-accent);
-            box-shadow: 0 0 30px rgba(255, 107, 107, 0.5);
+            transform: scale(1.05);
+            box-shadow: 0 0 20px var(--primary);
         }
         
         .avatar-overlay {
@@ -273,373 +262,222 @@ ob_end_flush();
             opacity: 0;
             transition: opacity 0.3s ease;
             color: white;
-            font-size: 1.5rem;
+            font-size: 0.9rem;
+            text-align: center;
         }
         
-        .avatar-upload:hover .avatar-overlay {
+        .avatar-preview-container:hover .avatar-overlay {
             opacity: 1;
         }
         
         .form-section {
-            background: var(--cyber-card);
-            backdrop-filter: blur(15px);
+            background: var(--card-bg);
             border-radius: 15px;
             padding: 2rem;
             margin-bottom: 2rem;
-            border: 1px solid var(--cyber-border);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-            position: relative;
-            overflow: hidden;
-            animation: slideUp 0.6s ease-out;
+            border: 1px solid var(--border-color);
         }
         
-        .form-section:nth-child(2) { animation-delay: 0.1s; }
-        .form-section:nth-child(3) { animation-delay: 0.2s; }
-        .form-section:nth-child(4) { animation-delay: 0.3s; }
-        
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        .section-title {
+            margin-top: 0;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--primary);
         }
         
-        .form-section::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--cyber-primary), var(--cyber-secondary));
-            box-shadow: var(--cyber-neon);
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
         }
         
-        .form-section h2 {
-            font-family: 'Orbitron', monospace;
-            color: var(--cyber-text);
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 1.4rem;
-        }
-        
-        .form-group {
-            margin-bottom: 1.5rem;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--cyber-text);
-            font-weight: 600;
-            font-size: 1rem;
-        }
-        
-        .form-control {
-            width: 100%;
-            padding: 12px 15px;
-            border-radius: 10px;
-            border: 2px solid var(--cyber-border);
-            background: rgba(0, 0, 0, 0.3);
-            color: var(--cyber-text);
-            font-size: 1rem;
-            transition: all 0.3s ease;
-            font-family: 'Exo 2', sans-serif;
-        }
-        
-        .form-control:focus {
-            outline: none;
-            border-color: var(--cyber-primary);
-            box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
-            background: rgba(0, 0, 0, 0.5);
-            transform: translateY(-2px);
-        }
-        
-        .form-control::placeholder {
-            color: var(--cyber-text-secondary);
-        }
-        
-        textarea.form-control {
-            min-height: 120px;
-            resize: vertical;
-        }
-        
-        .btn {
-            padding: 12px 25px;
-            border-radius: 50px;
-            border: none;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-right: 10px;
-            position: relative;
-            overflow: hidden;
-            font-family: 'Exo 2', sans-serif;
-        }
-        
-        .btn::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: 0.5s;
-        }
-        
-        .btn:hover::before {
-            left: 100%;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(45deg, var(--cyber-accent), var(--cyber-secondary));
-            color: white;
-            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
-        }
-        
-        .btn-secondary {
-            background: transparent;
-            color: var(--cyber-success);
-            border: 2px solid var(--cyber-success);
-        }
-        
-        .btn-secondary:hover {
-            background: var(--cyber-success);
-            color: var(--cyber-dark);
-            transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(0, 255, 157, 0.4);
-        }
-        
-        .message {
-            padding: 15px;
-            border-radius: 10px;
-            margin: 20px 0;
-            animation: slideIn 0.5s ease-out;
-        }
-        
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
             }
         }
         
-        .message.success { 
-            background: rgba(0, 255, 157, 0.15); 
-            color: var(--cyber-success); 
-            border: 1px solid rgba(0, 255, 157, 0.3);
-            box-shadow: 0 0 15px rgba(0, 255, 157, 0.2);
-        }
-        
-        .message.error { 
-            background: rgba(255, 71, 87, 0.15); 
-            color: var(--cyber-danger); 
-            border: 1px solid rgba(255, 71, 87, 0.3);
-            box-shadow: 0 0 15px rgba(255, 71, 87, 0.2);
-        }
-        
-        .message.info { 
-            background: rgba(0, 245, 255, 0.15); 
-            color: var(--cyber-primary); 
-            border: 1px solid rgba(0, 245, 255, 0.3);
-            box-shadow: 0 0 15px rgba(0, 245, 255, 0.2);
-        }
-        
-        .password-section {
-            border-top: 1px solid var(--cyber-border);
-            margin-top: 2rem;
-            padding-top: 2rem;
-        }
-        
-        .preview-image {
-            max-width: 100%;
-            max-height: 300px;
-            border-radius: 10px;
+        .upload-feedback {
             margin-top: 10px;
-            display: none;
-            border: 2px solid var(--cyber-border);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        }
-        
-        .file-input {
-            display: none;
-        }
-        
-        .upload-instructions {
-            text-align: center;
-            color: var(--cyber-text-secondary);
+            padding: 10px;
+            border-radius: 5px;
             font-size: 0.9rem;
-            margin-top: 10px;
         }
         
-        #particles-js {
-            position: fixed;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
-            z-index: -1;
+        .upload-success {
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #10b981;
+        }
+        
+        .upload-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+        
+        .character-count {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            text-align: right;
+            margin-top: 5px;
+        }
+        
+        .character-limit-exceeded {
+            color: var(--danger);
         }
     </style>
 </head>
 <body>
-    <!-- Particles Background -->
-    <div id="particles-js"></div>
+    <?php include 'includes/header.php'; ?>
     
-    <?php if (isset($fatal_error)): ?>
-        <div class="error-banner">
-            <h2>🚨 System Error</h2>
-            <p><?php echo htmlspecialchars($fatal_error); ?></p>
-            <p><a href="index.php">Return to main site</a></p>
-        </div>
-    <?php else: ?>
-    
-    <div class="profile-edit-container">
-        <div class="profile-header">
-            <h1>Edit Your Profile</h1>
-            <p>Customize your public profile and account settings</p>
-        </div>
-        
-        <?php if ($message): ?>
-            <div class="message <?php echo $message_type; ?>">
-                <?php echo htmlspecialchars($message); ?>
-            </div>
-        <?php endif; ?>
-        
-        <form method="POST" enctype="multipart/form-data" id="profileForm">
-            <!-- Avatar Section -->
-            <div class="form-section">
-                <h2><i class="fas fa-camera"></i> Profile Picture</h2>
-                <div class="avatar-upload">
-                    <img src="<?php echo !empty($user_data['avatar']) ? htmlspecialchars($user_data['avatar']) : 'https://ui-avatars.com/api/?name=' . urlencode($user_data['username']) . '&background=4ecdc4&color=fff'; ?>" 
-                         alt="Profile Picture" class="avatar-preview" id="avatarPreview">
-                    <div class="avatar-overlay">
-                        <i class="fas fa-camera"></i>
+    <main class="main-container">
+        <div class="container">
+            <div class="profile-edit-container">
+                <div class="profile-header">
+                    <h1><i class="fas fa-user-edit"></i> Edit Your Profile</h1>
+                    <p>Customize your profile and manage your account settings</p>
+                </div>
+                
+                <?php if ($message): ?>
+                    <div class="alert <?php echo $message_type; ?>">
+                        <?php echo htmlspecialchars($message); ?>
                     </div>
-                    <input type="file" name="avatar" id="avatarInput" class="file-input" accept="image/*">
+                <?php endif; ?>
+                
+                <form method="POST" enctype="multipart/form-data" id="profileForm">
+                    <!-- Avatar Section -->
+                    <div class="form-section">
+                        <h2 class="section-title"><i class="fas fa-camera"></i> Profile Picture</h2>
+                        <div class="avatar-section">
+                            <div class="avatar-preview-container">
+                                <img src="<?php echo !empty($user_data['avatar']) ? htmlspecialchars($user_data['avatar']) : 'assets/images/default-avatar.png'; ?>" 
+                                     alt="Profile Picture" class="avatar-preview" id="avatarPreview">
+                                <div class="avatar-overlay">
+                                    <div>
+                                        <i class="fas fa-camera"></i><br>
+                                        Click to change
+                                    </div>
+                                </div>
+                            </div>
+                            <input type="file" id="avatarInput" name="avatar" accept="image/*" style="display: none;">
+                            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 10px;">
+                                <i class="fas fa-info-circle"></i> JPG, PNG, or GIF files only. Max 2MB.
+                            </p>
+                            <div id="uploadFeedback"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Basic Information -->
+                    <div class="form-section">
+                        <h2 class="section-title"><i class="fas fa-user"></i> Basic Information</h2>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="username">Username</label>
+                                <input type="text" id="username" name="username" 
+                                       value="<?php echo htmlspecialchars($user_data['username']); ?>"
+                                       class="form-control" minlength="3" maxlength="30" required>
+                                <small>3-30 characters, letters, numbers, and underscores only</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="email">Email Address</label>
+                                <input type="email" id="email" name="email" 
+                                       value="<?php echo htmlspecialchars($user_data['email']); ?>"
+                                       class="form-control" disabled>
+                                <small>Email cannot be changed for security reasons</small>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="bio">Bio</label>
+                            <textarea id="bio" name="bio" class="form-control" 
+                                      maxlength="500" rows="4"><?php echo htmlspecialchars($user_data['bio'] ?? ''); ?></textarea>
+                            <div class="character-count" id="bioCount">0/500 characters</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Additional Information -->
+                    <div class="form-section">
+                        <h2 class="section-title"><i class="fas fa-info-circle"></i> Additional Information</h2>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="location">Location</label>
+                                <input type="text" id="location" name="location" 
+                                       value="<?php echo htmlspecialchars($user_data['location'] ?? ''); ?>"
+                                       class="form-control" maxlength="100">
+                                <small>Where are you based?</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="website">Website</label>
+                                <input type="url" id="website" name="website" 
+                                       value="<?php echo htmlspecialchars($user_data['website'] ?? ''); ?>"
+                                       class="form-control" placeholder="https://yourwebsite.com">
+                                <small>Your personal or professional website</small>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="signature">Forum Signature</label>
+                            <textarea id="signature" name="signature" class="form-control" 
+                                      maxlength="300" rows="3"><?php echo htmlspecialchars($user_data['signature'] ?? ''); ?></textarea>
+                            <div class="character-count" id="signatureCount">0/300 characters</div>
+                            <small>Displayed at the end of your posts</small>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" style="text-align: center;">
+                        <button type="submit" name="update_profile" class="btn btn-primary" style="padding: 12px 30px;">
+                            <i class="fas fa-save"></i> Save Changes
+                        </button>
+                        <a href="profile.php?id=<?php echo $user_id; ?>" class="btn btn-secondary" style="padding: 12px 30px; margin-left: 15px;">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
+                    </div>
+                </form>
+                
+                <!-- Password Change Section -->
+                <div class="form-section">
+                    <h2 class="section-title"><i class="fas fa-key"></i> Change Password</h2>
+                    <form method="POST" id="passwordForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="current_password">Current Password</label>
+                                <input type="password" id="current_password" name="current_password" 
+                                       class="form-control" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="new_password">New Password</label>
+                                <input type="password" id="new_password" name="new_password" 
+                                       class="form-control" minlength="8" required>
+                                <small>At least 8 characters long</small>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label for="confirm_password">Confirm New Password</label>
+                                <input type="password" id="confirm_password" name="confirm_password" 
+                                       class="form-control" minlength="8" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group" style="text-align: center; margin-top: 20px;">
+                            <button type="submit" name="change_password" class="btn btn-warning">
+                                <i class="fas fa-key"></i> Change Password
+                            </button>
+                        </div>
+                    </form>
                 </div>
-                <div class="upload-instructions">
-                    <p>Click the image to upload a new avatar</p>
-                    <p>Supported formats: JPG, PNG, GIF (Max 2MB)</p>
-                </div>
-                <img id="imagePreview" class="preview-image" alt="Preview">
             </div>
-            
-            <!-- Basic Info Section -->
-            <div class="form-section">
-                <h2><i class="fas fa-user"></i> Basic Information</h2>
-                
-                <div class="form-group">
-                    <label for="username">Username</label>
-                    <input type="text" id="username" name="username" class="form-control" 
-                           value="<?php echo htmlspecialchars($user_data['username']); ?>" 
-                           minlength="3" maxlength="30" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="bio">Bio</label>
-                    <textarea id="bio" name="bio" class="form-control" 
-                              placeholder="Tell us about yourself..."><?php echo htmlspecialchars($user_data['bio'] ?? ''); ?></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label for="location">Location</label>
-                    <input type="text" id="location" name="location" class="form-control" 
-                           value="<?php echo htmlspecialchars($user_data['location'] ?? ''); ?>" 
-                           placeholder="Where are you from?">
-                </div>
-                
-                <div class="form-group">
-                    <label for="website">Website</label>
-                    <input type="url" id="website" name="website" class="form-control" 
-                           value="<?php echo htmlspecialchars($user_data['website'] ?? ''); ?>" 
-                           placeholder="https://yourwebsite.com">
-                </div>
-            </div>
-            
-            <!-- Signature Section -->
-            <div class="form-section">
-                <h2><i class="fas fa-signature"></i> Forum Signature</h2>
-                <div class="form-group">
-                    <label for="signature">Signature</label>
-                    <textarea id="signature" name="signature" class="form-control" 
-                              placeholder="This will appear at the bottom of your posts..."><?php echo htmlspecialchars($user_data['signature'] ?? ''); ?></textarea>
-                    <small class="upload-instructions">Supports basic Markdown formatting</small>
-                </div>
-            </div>
-            
-            <!-- Submit Button -->
-            <div style="text-align: center; margin: 2rem 0;">
-                <button type="submit" name="update_profile" class="btn btn-primary">
-                    <i class="fas fa-save"></i> Save Changes
-                </button>
-                <a href="profile.php?username=<?php echo urlencode($user_data['username']); ?>" class="btn btn-secondary">
-                    <i class="fas fa-times"></i> Cancel
-                </a>
-            </div>
-        </form>
-        
-        <!-- Password Change Section -->
-        <div class="form-section">
-            <h2><i class="fas fa-lock"></i> Change Password</h2>
-            <form method="POST" id="passwordForm">
-                <div class="form-group">
-                    <label for="current_password">Current Password</label>
-                    <input type="password" id="current_password" name="current_password" class="form-control" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="new_password">New Password</label>
-                    <input type="password" id="new_password" name="new_password" class="form-control" 
-                           minlength="8" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="confirm_password">Confirm New Password</label>
-                    <input type="password" id="confirm_password" name="confirm_password" class="form-control" 
-                           minlength="8" required>
-                </div>
-                
-                <button type="submit" name="change_password" class="btn btn-primary">
-                    <i class="fas fa-key"></i> Change Password
-                </button>
-            </form>
         </div>
-    </div>
+    </main>
     
-    <?php endif; ?>
+    <?php include 'includes/footer.php'; ?>
     
-    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
     <script>
-        // Initialize particles
-        particlesJS('particles-js', {
-            particles: {
-                number: { value: 80, density: { enable: true, value_area: 800 } },
-                color: { value: '#4ecdc4' },
-                shape: { type: 'circle' },
-                opacity: { value: 0.5, random: true },
-                size: { value: 3, random: true },
-                line_linked: { enable: true, distance: 150, color: '#4ecdc4', opacity: 0.4, width: 1 },
-                move: { enable: true, speed: 2, direction: 'none', random: true, straight: false, out_mode: 'out' }
-            }
-        });
-
         // Avatar upload handling
         document.getElementById('avatarPreview').addEventListener('click', function() {
             document.getElementById('avatarInput').click();
@@ -647,40 +485,111 @@ ob_end_flush();
 
         document.getElementById('avatarInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
+            const feedback = document.getElementById('uploadFeedback');
+            
             if (file) {
+                // Validate file type
+                const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+                if (!allowedTypes.includes(file.type)) {
+                    feedback.innerHTML = '<div class="upload-feedback upload-error"><i class="fas fa-exclamation-circle"></i> Invalid file type. Please select a JPG, PNG, or GIF image.</div>';
+                    return;
+                }
+                
+                // Validate file size (2MB)
+                if (file.size > 2 * 1024 * 1024) {
+                    feedback.innerHTML = '<div class="upload-feedback upload-error"><i class="fas fa-exclamation-circle"></i> File too large. Maximum size is 2MB.</div>';
+                    return;
+                }
+                
+                // Preview image
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     document.getElementById('avatarPreview').src = e.target.result;
-                    document.getElementById('imagePreview').src = e.target.result;
-                    document.getElementById('imagePreview').style.display = 'block';
+                    feedback.innerHTML = '<div class="upload-feedback upload-success"><i class="fas fa-check-circle"></i> Image selected. Click "Save Changes" to upload.</div>';
                 };
                 reader.readAsDataURL(file);
             }
         });
 
+        // Character counters
+        function updateCharacterCount(textareaId, counterId, maxLength) {
+            const textarea = document.getElementById(textareaId);
+            const counter = document.getElementById(counterId);
+            
+            function updateCount() {
+                const currentLength = textarea.value.length;
+                counter.textContent = `${currentLength}/${maxLength} characters`;
+                counter.className = currentLength > maxLength * 0.9 ? 'character-count character-limit-exceeded' : 'character-count';
+            }
+            
+            textarea.addEventListener('input', updateCount);
+            updateCount(); // Initial count
+        }
+
+        // Initialize character counters
+        updateCharacterCount('bio', 'bioCount', 500);
+        updateCharacterCount('signature', 'signatureCount', 300);
+
         // Form validation
         document.getElementById('profileForm').addEventListener('submit', function(e) {
             const username = document.getElementById('username').value;
+            const bio = document.getElementById('bio').value;
+            const location = document.getElementById('location').value;
+            const signature = document.getElementById('signature').value;
+            
+            // Username validation
             if (username.length < 3 || username.length > 30) {
                 e.preventDefault();
                 alert('Username must be between 3 and 30 characters');
                 return false;
             }
+            
+            if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+                e.preventDefault();
+                alert('Username can only contain letters, numbers, and underscores');
+                return false;
+            }
+            
+            // Length validations
+            if (bio.length > 500) {
+                e.preventDefault();
+                alert('Bio must be 500 characters or less');
+                return false;
+            }
+            
+            if (location.length > 100) {
+                e.preventDefault();
+                alert('Location must be 100 characters or less');
+                return false;
+            }
+            
+            if (signature.length > 300) {
+                e.preventDefault();
+                alert('Signature must be 300 characters or less');
+                return false;
+            }
         });
 
         document.getElementById('passwordForm').addEventListener('submit', function(e) {
+            const currentPassword = document.getElementById('current_password').value;
             const newPassword = document.getElementById('new_password').value;
             const confirmPassword = document.getElementById('confirm_password').value;
             
             if (newPassword.length < 8) {
                 e.preventDefault();
-                alert('Password must be at least 8 characters long');
+                alert('New password must be at least 8 characters long');
                 return false;
             }
             
             if (newPassword !== confirmPassword) {
                 e.preventDefault();
-                alert('Passwords do not match');
+                alert('New passwords do not match');
+                return false;
+            }
+            
+            if (currentPassword === newPassword) {
+                e.preventDefault();
+                alert('New password must be different from current password');
                 return false;
             }
         });
@@ -689,46 +598,84 @@ ob_end_flush();
 </html>
 
 <?php
-function handle_avatar_upload($file, $user_id) {
+function handle_avatar_upload_improved($file, $user_id) {
     global $pdo;
     
-    $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
-    $max_size = 2 * 1024 * 1024; // 2MB
-    
-    // Validate file
-    if (!in_array($file['type'], $allowed_types)) {
-        return ['success' => false, 'error' => 'Invalid file type. Only JPG, PNG, and GIF are allowed.'];
-    }
-    
-    if ($file['size'] > $max_size) {
-        return ['success' => false, 'error' => 'File too large. Maximum size is 2MB.'];
-    }
-    
-    // Create uploads directory if it doesn't exist
-    $upload_dir = 'uploads/avatars/';
-    if (!file_exists($upload_dir)) {
-        mkdir($upload_dir, 0755, true);
-    }
-    
-    // Generate unique filename
-    $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $filename = 'avatar_' . $user_id . '_' . time() . '.' . $extension;
-    $filepath = $upload_dir . $filename;
-    
-    // Move uploaded file
-    if (move_uploaded_file($file['tmp_name'], $filepath)) {
-        // Remove old avatar if exists
-        $stmt = $pdo->prepare("SELECT avatar FROM users WHERE id = ?");
-        $stmt->execute([$user_id]);
-        $old_avatar = $stmt->fetchColumn();
+    try {
+        $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
+        $max_size = 2 * 1024 * 1024; // 2MB
         
-        if ($old_avatar && file_exists($old_avatar)) {
-            unlink($old_avatar);
+        // Validate file
+        if (!in_array($file['type'], $allowed_types)) {
+            return ['success' => false, 'error' => 'Invalid file type. Only JPG, PNG, and GIF are allowed.'];
         }
         
-        return ['success' => true, 'filename' => $filepath];
-    } else {
-        return ['success' => false, 'error' => 'Failed to upload file'];
+        if ($file['size'] > $max_size) {
+            return ['success' => false, 'error' => 'File too large. Maximum size is 2MB.'];
+        }
+        
+        // Create uploads directory if it doesn't exist
+        $upload_dir = 'uploads/avatars/';
+        if (!is_dir($upload_dir)) {
+            if (!mkdir($upload_dir, 0755, true)) {
+                return ['success' => false, 'error' => 'Failed to create upload directory'];
+            }
+        }
+        
+        // Check if directory is writable
+        if (!is_writable($upload_dir)) {
+            return ['success' => false, 'error' => 'Upload directory is not writable'];
+        }
+        
+        // Generate unique filename
+        $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $filename = 'avatar_' . $user_id . '_' . time() . '.' . $extension;
+        $filepath = $upload_dir . $filename;
+        
+        // Move uploaded file
+        if (move_uploaded_file($file['tmp_name'], $filepath)) {
+            // Remove old avatar if exists
+            try {
+                $stmt = $pdo->prepare("SELECT avatar FROM users WHERE id = ?");
+                $stmt->execute([$user_id]);
+                $old_avatar = $stmt->fetchColumn();
+                
+                if ($old_avatar && file_exists($old_avatar) && strpos($old_avatar, 'avatar_') !== false) {
+                    unlink($old_avatar);
+                }
+            } catch (Exception $e) {
+                // Log error but don't fail the upload
+                error_log("Failed to remove old avatar: " . $e->getMessage());
+            }
+            
+            return ['success' => true, 'filename' => $filepath];
+        } else {
+            return ['success' => false, 'error' => 'Failed to move uploaded file'];
+        }
+        
+    } catch (Exception $e) {
+        error_log("Avatar upload error: " . $e->getMessage());
+        return ['success' => false, 'error' => 'Upload failed: ' . $e->getMessage()];
+    }
+}
+
+function get_upload_error_message($error_code) {
+    switch ($error_code) {
+        case UPLOAD_ERR_INI_SIZE:
+        case UPLOAD_ERR_FORM_SIZE:
+            return 'File exceeds maximum allowed size';
+        case UPLOAD_ERR_PARTIAL:
+            return 'File was only partially uploaded';
+        case UPLOAD_ERR_NO_FILE:
+            return 'No file was uploaded';
+        case UPLOAD_ERR_NO_TMP_DIR:
+            return 'Missing temporary folder';
+        case UPLOAD_ERR_CANT_WRITE:
+            return 'Failed to write file to disk';
+        case UPLOAD_ERR_EXTENSION:
+            return 'File upload stopped by extension';
+        default:
+            return 'Unknown upload error';
     }
 }
 ?>

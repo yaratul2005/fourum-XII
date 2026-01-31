@@ -137,31 +137,127 @@ function vote_post($user_id, $post_id, $vote_type) {
 
 // Email Functions
 function send_verification_email($email, $token) {
-    $subject = "Verify your Furom account";
-    $verification_link = SITE_URL . "/verify.php?token=" . $token;
-    $message = "
-    <html>
-    <head>
-        <title>Furom Account Verification</title>
-    </head>
-    <body>
-        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>
-            <h2>Welcome to Furom!</h2>
-            <p>Thank you for registering. Please click the link below to verify your email address:</p>
-            <p><a href='$verification_link' style='background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;'>Verify Email</a></p>
-            <p>If the button doesn't work, copy and paste this link:</p>
-            <p>$verification_link</p>
-            <p>This link will expire in 24 hours.</p>
-        </div>
-    </body>
-    </html>
-    ";
+    global $pdo;
     
-    $headers = "MIME-Version: 1.0" . "\r\n";
-    $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-    $headers .= "From: " . SMTP_USERNAME . "\r\n";
+    try {
+        // Get SMTP settings from database or config
+        $smtp_settings = get_smtp_settings();
+        
+        $subject = "Verify your Furom account";
+        $verification_link = SITE_URL . "/verify.php?token=" . $token;
+        
+        $message = "
+        <html>
+        <head>
+            <title>Furom Account Verification</title>
+            <style>
+                body { font-family: Arial, sans-serif; background: #0a0a1a; color: #f0f0f0; margin: 0; padding: 20px; }
+                .container { max-width: 600px; margin: 0 auto; background: #121225; border-radius: 10px; padding: 30px; }
+                .header { text-align: center; margin-bottom: 30px; }
+                .header h1 { color: #00f5ff; margin: 0; }
+                .content { line-height: 1.6; }
+                .button { display: inline-block; background: linear-gradient(45deg, #00f5ff, #ff00ff); color: #0a0a1a; padding: 12px 25px; text-decoration: none; border-radius: 25px; font-weight: bold; margin: 20px 0; }
+                .footer { margin-top: 30px; font-size: 0.9em; color: #888; text-align: center; }
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <h1><i class='fas fa-robot'></i> FUROM</h1>
+                    <h2>Welcome to Our Community!</h2>
+                </div>
+                <div class='content'>
+                    <p>Thank you for joining Furom! We're excited to have you as part of our futuristic community.</p>
+                    <p>To complete your registration and start earning EXP, please verify your email address by clicking the button below:</p>
+                    <center><a href='$verification_link' class='button'>Verify My Email</a></center>
+                    <p>If the button doesn't work, copy and paste this link into your browser:</p>
+                    <p style='word-break: break-all; background: rgba(0,245,255,0.1); padding: 10px; border-radius: 5px;'><a href='$verification_link' style='color: #00f5ff;'>$verification_link</a></p>
+                    <p><strong>This verification link will expire in 24 hours.</strong></p>
+                    <p>Once verified, you'll be able to:</p>
+                    <ul>
+                        <li>Create posts and earn EXP</li>
+                        <li>Comment on discussions</li>
+                        <li>Vote on content</li>
+                        <li>Build your reputation in our community</li>
+                    </ul>
+                </div>
+                <div class='footer'>
+                    <p>Need help? Contact us at " . ADMIN_EMAIL . "</p>
+                    <p>&copy; " . date('Y') . " Furom. All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        ";
+        
+        // Try SMTP first, fall back to mail()
+        if ($smtp_settings && $smtp_settings['enabled']) {
+            return send_smtp_email($email, $subject, $message, $smtp_settings);
+        } else {
+            return send_basic_email($email, $subject, $message);
+        }
+        
+    } catch (Exception $e) {
+        error_log("Email sending error: " . $e->getMessage());
+        return false;
+    }
+}
+
+function get_smtp_settings() {
+    global $pdo;
     
-    return mail($email, $subject, $message, $headers);
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM settings WHERE setting_key LIKE 'smtp_%'");
+        $stmt->execute();
+        $settings = [];
+        while ($row = $stmt->fetch()) {
+            $settings[str_replace('smtp_', '', $row['setting_key'])] = $row['setting_value'];
+        }
+        
+        return !empty($settings) ? $settings : null;
+    } catch (Exception $e) {
+        return null;
+    }
+}
+
+function send_smtp_email($to, $subject, $message, $smtp_settings) {
+    try {
+        // Use PHPMailer or similar library for SMTP
+        // This is a simplified version - in production, use a proper email library
+        
+        $headers = "MIME-Version: 1.0\r\n";
+        $headers .= "Content-type: text/html; charset=UTF-8\r\n";
+        $headers .= "From: " . ($smtp_settings['from_email'] ?? SMTP_USERNAME) . "\r\n";
+        $headers .= "Reply-To: " . ($smtp_settings['from_email'] ?? SMTP_USERNAME) . "\r\n";
+        $headers .= "X-Mailer: PHP/" . phpversion() . "\r\n";
+        
+        // Add authentication if needed
+        if (!empty($smtp_settings['username']) && !empty($smtp_settings['password'])) {
+            $headers .= "Authorization: Basic " . base64_encode($smtp_settings['username'] . ':' . $smtp_settings['password']) . "\r\n";
+        }
+        
+        return mail($to, $subject, $message, $headers);
+        
+    } catch (Exception $e) {
+        error_log("SMTP email error: " . $e->getMessage());
+        return false;
+    }
+}
+
+function send_basic_email($to, $subject, $message) {
+    try {
+        $headers = "MIME-Version: 1.0\r\n";
+        $headers .= "Content-type: text/html; charset=UTF-8\r\n";
+        $headers .= "From: " . SMTP_USERNAME . "\r\n";
+        $headers .= "Reply-To: " . SMTP_USERNAME . "\r\n";
+        $headers .= "X-Mailer: PHP/" . phpversion() . "\r\n";
+        
+        return mail($to, $subject, $message, $headers);
+        
+    } catch (Exception $e) {
+        error_log("Basic email error: " . $e->getMessage());
+        return false;
+    }
 }
 
 // Utility Functions

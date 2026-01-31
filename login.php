@@ -76,6 +76,62 @@ try {
     <link rel="stylesheet" href="assets/css/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
+<style>
+.social-login {
+    margin-bottom: 2rem;
+}
+
+.google-login-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    background: linear-gradient(135deg, #4285f4, #34a853);
+    color: white;
+    padding: 15px 20px;
+    border-radius: 50px;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(66, 133, 244, 0.3);
+    border: 2px solid transparent;
+    width: 100%;
+    font-size: 1rem;
+}
+
+.google-login-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(66, 133, 244, 0.4);
+    background: linear-gradient(135deg, #34a853, #4285f4);
+}
+
+.google-login-btn i {
+    font-size: 1.2rem;
+}
+
+.divider {
+    text-align: center;
+    margin: 2rem 0;
+    position: relative;
+}
+
+.divider::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--border-color);
+}
+
+.divider span {
+    background: var(--card-bg);
+    padding: 0 15px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+</style>
 <body>
     <!-- Header -->
     <header class="cyber-header">
@@ -112,6 +168,19 @@ try {
                             <?php endforeach; ?>
                         </ul>
                     </div>
+                <?php endif; ?>
+                
+                <?php if ($google_enabled): ?>
+                <!-- Google Auto Login Button -->
+                <div class="social-login">
+                    <a href="auth/google/login.php" class="google-login-btn">
+                        <i class="fab fa-google"></i>
+                        <span>Continue with Google</span>
+                    </a>
+                    <div class="divider">
+                        <span>or</span>
+                    </div>
+                </div>
                 <?php endif; ?>
                 
                 <form method="POST">

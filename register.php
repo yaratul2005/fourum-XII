@@ -52,11 +52,29 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $stmt = $pdo->prepare("INSERT INTO users (username, email, password, verification_token, created_at) VALUES (?, ?, ?, ?, NOW())");
         
         if ($stmt->execute([$username, $email, $hashed_password, $verification_token])) {
-            // Send verification email
-            if (send_verification_email($email, $verification_token)) {
-                $success = 'Registration successful! Please check your email to verify your account.';
+            // Send verification email with improved error handling
+            $email_sent = false;
+            $email_error = '';
+            
+            try {
+                $email_sent = send_verification_email($email, $verification_token);
+                if (!$email_sent) {
+                    // Try alternative method
+                    $email_error = 'Primary email method failed';
+                    error_log("Primary email sending failed for user: " . $username);
+                }
+            } catch (Exception $e) {
+                $email_error = 'Email sending error: ' . $e->getMessage();
+                error_log("Email sending exception for user " . $username . ": " . $e->getMessage());
+            }
+            
+            if ($email_sent) {
+                $success = 'Registration successful! Please check your email to verify your account. Check your spam folder if you don\'t see it.';
             } else {
-                $errors[] = 'Failed to send verification email. Please contact support.';
+                // Registration still succeeded, but email failed
+                $success = 'Registration successful! However, we couldn\'t send the verification email. Please contact support or try resending verification later. Your account is created but needs verification.';
+                // Log this for admin review
+                error_log("Registration succeeded but email failed for user: " . $username . " - Error: " . $email_error);
             }
         } else {
             $errors[] = 'Registration failed. Please try again.';
@@ -119,6 +137,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                 <?php endif; ?>
                 
+                <!-- Google Auto Login Button -->
+                <div style="margin: 25px 0; text-align: center;">
+                    <a href="auth/google/login.php" style="display: inline-flex; align-items: center; gap: 12px; background: linear-gradient(135deg, #4285f4, #34a853); color: white; padding: 15px 25px; border-radius: 50px; text-decoration: none; font-weight: 600; transition: all 0.3s ease; box-shadow: 0 4px 15px rgba(66, 133, 244, 0.3); border: 2px solid transparent;">
+                        <i class="fab fa-google"></i>
+                        <span>Sign up with Google</span>
+                    </a>
+                    <div style="margin: 20px 0; position: relative;">
+                        <div style="position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border-color);"></div>
+                        <span style="background: var(--card-bg); padding: 0 15px; color: var(--text-secondary); font-size: 0.9rem; position: relative;">or</span>
+                    </div>
+                </div>
+
                 <form method="POST" data-validate data-auto-save="true" id="register-form">
                     <div class="form-group">
                         <label for="username" class="form-label">Username *</label>
