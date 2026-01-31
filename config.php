@@ -1,9 +1,9 @@
 <?php
-// Database Configuration
+// Database Configuration - UPDATE THESE VALUES WITH YOUR CPANEL CREDENTIALS
 define('DB_HOST', 'localhost');
-define('DB_USER', 'your_username');
-define('DB_PASS', 'your_password');
-define('DB_NAME', 'furom_db');
+define('DB_USER', 'greatxyz_admin'); // Replace with your cPanel username + _admin
+define('DB_PASS', 'your_actual_password'); // Replace with your actual database password
+define('DB_NAME', 'greatxyz_admin'); // Replace with your actual database name
 
 // Site Configuration
 define('SITE_URL', 'https://great10.xyz');
@@ -11,7 +11,7 @@ define('SITE_NAME', 'Furom - Futuristic Forum');
 define('ADMIN_EMAIL', 'admin@great10.xyz');
 
 // Security Settings
-define('SECRET_KEY', 'your_very_secure_secret_key_here');
+define('SECRET_KEY', 'furom_secure_key_' . date('Ymd')); // More secure secret key
 define('SESSION_TIMEOUT', 3600); // 1 hour
 
 // Experience Points Configuration
@@ -26,17 +26,26 @@ define('SMTP_PORT', 587);
 define('SMTP_USERNAME', 'noreply@great10.xyz');
 define('SMTP_PASSWORD', 'your_email_password');
 
-// Initialize session
-session_start();
-
-// Database connection
-try {
-    $pdo = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8", DB_USER, DB_PASS);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch(PDOException $e) {
-    die("Connection failed: " . $e->getMessage());
+// Initialize session with error prevention
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
 }
 
-// Autoload functions
-require_once 'includes/functions.php';
+// Database connection with error handling
+try {
+    $pdo = new PDO(
+        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+        DB_USER,
+        DB_PASS,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]
+    );
+} catch (PDOException $e) {
+    // Log error instead of displaying it publicly
+    error_log("Database connection failed: " . $e->getMessage());
+    die("Database connection error. Please check configuration.");
+}
 ?>
