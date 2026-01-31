@@ -1,5 +1,5 @@
 <?php
-// Google OAuth Configuration for Admin Panel
+// Google OAuth Configuration for Admin Panel - Enhanced Version
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -25,12 +25,37 @@ try {
         exit();
     }
     
+    // Generate CSRF token if not exists
+    if (!isset($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = generate_token();
+    }
+    
     $message = '';
     $message_type = '';
+    $initialization_needed = false;
+    
+    // Check if settings table exists
+    try {
+        $stmt = $pdo->query("SHOW TABLES LIKE 'settings'");
+        if ($stmt->rowCount() == 0) {
+            $initialization_needed = true;
+            $message = 'Settings table not found. Please initialize it first.';
+            $message_type = 'warning';
+        }
+    } catch (Exception $e) {
+        $message = 'Database connection error: ' . $e->getMessage();
+        $message_type = 'error';
+        $initialization_needed = true;
+    }
     
     // Handle Google OAuth configuration save
-    if (isset($_POST['save_google_auth'])) {
+    if (isset($_POST['save_google_auth']) && !$initialization_needed) {
         try {
+            // Validate CSRF token
+            if (!isset($_POST['csrf_token']) || !verify_token($_POST['csrf_token'])) {
+                throw new Exception('Invalid security token. Please try again.');
+            }
+            
             $google_config = [
                 'client_id' => trim($_POST['google_client_id'] ?? ''),
                 'client_secret' => trim($_POST['google_client_secret'] ?? ''),
@@ -44,24 +69,101 @@ try {
             }
             
             // Save configuration
-            save_google_config($google_config);
-            $message = 'Google OAuth configuration saved successfully!';
-            $message_type = 'success';
+            if (save_google_config_enhanced($google_config)) {
+                $message = 'Google OAuth configuration saved successfully!';
+                $message_type = 'success';
+                // Refresh the configuration to show updated values
+                $current_google = get_google_config_enhanced();
+            } else {
+                throw new Exception('Failed to save configuration to database.');
+            }
             
         } catch (Exception $e) {
             $message = 'Error: ' . $e->getMessage();
             $message_type = 'error';
+            error_log("Google OAuth save error: " . $e->getMessage());
         }
     }
     
     // Get current Google configuration
-    $current_google = get_google_config();
+    $current_google = $initialization_needed ? get_default_google_config() : get_google_config_enhanced();
     
 } catch (Exception $e) {
     $fatal_error = $e->getMessage();
+    error_log("Google Auth settings fatal error: " . $e->getMessage());
 }
 
 ob_end_flush();
+
+// Enhanced helper functions
+function get_default_google_config() {
+    return [
+        'enabled' => 0,
+        'client_id' => '',
+        'client_secret' => '',
+        'redirect_uri' => ''
+    ];
+}
+
+function get_google_config_enhanced() {
+    global $pdo;
+    try {
+        // Check if settings table exists
+        $stmt = $pdo->query("SHOW TABLES LIKE 'settings'");
+        if ($stmt->rowCount() == 0) {
+            return get_default_google_config();
+        }
+        
+        $stmt = $pdo->prepare("SELECT * FROM settings WHERE setting_key LIKE 'google_%'");
+        $stmt->execute();
+        $config = [];
+        while ($row = $stmt->fetch()) {
+            $config[str_replace('google_', '', $row['setting_key'])] = $row['setting_value'];
+        }
+        return array_merge(get_default_google_config(), $config);
+    } catch (Exception $e) {
+        error_log("Google config retrieval error: " . $e->getMessage());
+        return get_default_google_config();
+    }
+}
+
+function save_google_config_enhanced($config) {
+    global $pdo;
+    try {
+        // Ensure settings table exists
+        $stmt = $pdo->query("SHOW TABLES LIKE 'settings'");
+        if ($stmt->rowCount() == 0) {
+            // Create settings table
+            $create_table_sql = "
+                CREATE TABLE IF NOT EXISTS `settings` (
+                    `id` int(11) NOT NULL AUTO_INCREMENT,
+                    `setting_key` varchar(100) NOT NULL UNIQUE,
+                    `setting_value` text,
+                    `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    INDEX `idx_setting_key` (`setting_key`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ";
+            $pdo->exec($create_table_sql);
+        }
+        
+        $saved_count = 0;
+        foreach ($config as $key => $value) {
+            $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
+            $result = $stmt->execute(["google_$key", $value, $value]);
+            if ($result) {
+                $saved_count++;
+            }
+        }
+        
+        return $saved_count > 0;
+        
+    } catch (Exception $e) {
+        error_log("Google config save enhanced error: " . $e->getMessage());
+        return false;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -280,6 +382,13 @@ ob_end_flush();
             box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
         }
         
+        .message.warning {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--admin-warning);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
+        }
+        
         .config-section {
             background: var(--admin-card-bg);
             padding: 25px;
@@ -439,6 +548,25 @@ ob_end_flush();
             font-family: 'Courier New', monospace;
             border: 1px solid rgba(0, 245, 255, 0.2);
         }
+        
+        .initialization-warning {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(239, 68, 68, 0.2));
+            border: 2px solid var(--admin-warning);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .initialization-warning h3 {
+            color: var(--admin-warning);
+            margin-bottom: 15px;
+        }
+        
+        .initialization-warning p {
+            color: var(--admin-text-secondary);
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
@@ -499,7 +627,29 @@ ob_end_flush();
             <div class="admin-content">
                 <?php if ($message): ?>
                     <div class="message <?php echo $message_type; ?>">
+                        <?php if ($message_type === 'success'): ?>
+                            <i class="fas fa-check-circle"></i>
+                        <?php elseif ($message_type === 'error'): ?>
+                            <i class="fas fa-exclamation-circle"></i>
+                        <?php else: ?>
+                            <i class="fas fa-exclamation-triangle"></i>
+                        <?php endif; ?>
                         <?php echo htmlspecialchars($message); ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($initialization_needed): ?>
+                    <div class="initialization-warning">
+                        <h3><i class="fas fa-database"></i> Database Setup Required</h3>
+                        <p>The settings table is not initialized in your database. This is required for storing Google OAuth configuration.</p>
+                        <a href="init-settings-table.php" class="btn btn-primary">
+                            <i class="fas fa-hammer"></i> Initialize Settings Table
+                        </a>
+                        <p style="margin-top: 15px; font-size: 0.9rem;">
+                            <a href="debug-google-auth.php" style="color: var(--cyber-primary);">
+                                <i class="fas fa-bug"></i> Use Debug Tool Instead
+                            </a>
+                        </p>
                     </div>
                 <?php endif; ?>
 
@@ -511,21 +661,21 @@ ob_end_flush();
                 <div class="config-section">
                     <h2>Google OAuth Settings</h2>
                     
-                    <form method="POST">
+                    <form method="POST" <?php echo $initialization_needed ? 'disabled' : ''; ?>>
                         <div class="form-group checkbox-group">
-                            <input type="checkbox" id="google_enabled" name="google_enabled" <?php echo $current_google['enabled'] ? 'checked' : ''; ?>>
+                            <input type="checkbox" id="google_enabled" name="google_enabled" <?php echo $current_google['enabled'] ? 'checked' : ''; ?> <?php echo $initialization_needed ? 'disabled' : ''; ?>>
                             <label for="google_enabled">Enable Google Login</label>
                         </div>
                         
                         <div class="form-group">
                             <label for="google_client_id">Google Client ID *</label>
-                            <input type="text" id="google_client_id" name="google_client_id" value="<?php echo htmlspecialchars($current_google['client_id'] ?? ''); ?>" placeholder="Your Google OAuth Client ID">
+                            <input type="text" id="google_client_id" name="google_client_id" value="<?php echo htmlspecialchars($current_google['client_id'] ?? ''); ?>" placeholder="Your Google OAuth Client ID" <?php echo $initialization_needed ? 'disabled' : ''; ?>>
                             <small>Get this from Google Cloud Console</small>
                         </div>
                         
                         <div class="form-group">
                             <label for="google_client_secret">Google Client Secret *</label>
-                            <input type="password" id="google_client_secret" name="google_client_secret" value="<?php echo htmlspecialchars($current_google['client_secret'] ?? ''); ?>" placeholder="Your Google OAuth Client Secret">
+                            <input type="password" id="google_client_secret" name="google_client_secret" value="<?php echo htmlspecialchars($current_google['client_secret'] ?? ''); ?>" placeholder="Your Google OAuth Client Secret" <?php echo $initialization_needed ? 'disabled' : ''; ?>>
                             <small>This will be encrypted in the database</small>
                         </div>
                         
@@ -536,9 +686,16 @@ ob_end_flush();
                         </div>
                         
                         <div class="form-group">
-                            <button type="submit" name="save_google_auth" class="btn btn-primary">
-                                <i class="fas fa-save"></i> Save Configuration
-                            </button>
+                            <?php if (!$initialization_needed): ?>
+                                <button type="submit" name="save_google_auth" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Save Configuration
+                                </button>
+                                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                            <?php else: ?>
+                                <button type="button" class="btn btn-secondary" disabled>
+                                    <i class="fas fa-save"></i> Save Configuration (Initialize First)
+                                </button>
+                            <?php endif; ?>
                         </div>
                     </form>
                 </div>
@@ -573,39 +730,3 @@ ob_end_flush();
     <?php endif; ?>
 </body>
 </html>
-
-<?php
-// Helper functions
-function get_google_config() {
-    global $pdo;
-    try {
-        $stmt = $pdo->query("SELECT * FROM settings WHERE setting_key LIKE 'google_%'");
-        $config = [];
-        while ($row = $stmt->fetch()) {
-            $config[str_replace('google_', '', $row['setting_key'])] = $row['setting_value'];
-        }
-        return $config;
-    } catch (Exception $e) {
-        return [
-            'enabled' => 0,
-            'client_id' => '',
-            'client_secret' => '',
-            'redirect_uri' => ''
-        ];
-    }
-}
-
-function save_google_config($config) {
-    global $pdo;
-    try {
-        foreach ($config as $key => $value) {
-            $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
-            $stmt->execute(["google_$key", $value, $value]);
-        }
-        return true;
-    } catch (Exception $e) {
-        error_log("Google config save error: " . $e->getMessage());
-        return false;
-    }
-}
-?>
