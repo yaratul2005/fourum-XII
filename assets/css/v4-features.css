@@ -1,0 +1,357 @@
+/* Furom V4 Features - Unified Cyberpunk Styling */
+/* This file ensures consistent styling across all new V4 features */
+
+:root {
+    /* Core Cyberpunk Variables */
+    --cyber-primary: #00f5ff;
+    --cyber-secondary: #ff00ff;
+    --cyber-accent: #ff6b6b;
+    --cyber-dark: #0a0a1a;
+    --cyber-darker: #050510;
+    --cyber-card: #121225;
+    --cyber-text: #ffffff;
+    --cyber-text-secondary: #a0a0c0;
+    --cyber-border: #2a2a4a;
+    --cyber-success: #00ff9d;
+    --cyber-warning: #ffcc00;
+    --cyber-danger: #ff4757;
+    --cyber-neon: 0 0 10px var(--cyber-primary), 0 0 20px var(--cyber-primary), 0 0 30px var(--cyber-primary);
+    --cyber-neon-secondary: 0 0 10px var(--cyber-secondary), 0 0 20px var(--cyber-secondary);
+    
+    /* Animation Durations */
+    --anim-fast: 0.2s;
+    --anim-medium: 0.3s;
+    --anim-slow: 0.5s;
+    
+    /* Shadows */
+    --shadow-light: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --shadow-medium: 0 10px 15px rgba(0, 0, 0, 0.2);
+    --shadow-heavy: 0 20px 25px rgba(0, 0, 0, 0.3);
+}
+
+/* Base Reset for New Features */
+.v4-feature {
+    font-family: 'Exo 2', sans-serif;
+    background: var(--cyber-dark);
+    color: var(--cyber-text);
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Common Container Styles */
+.v4-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.v4-card {
+    background: var(--cyber-card);
+    border-radius: 15px;
+    padding: 2rem;
+    border: 1px solid var(--cyber-border);
+    box-shadow: var(--shadow-medium);
+    position: relative;
+    overflow: hidden;
+    transition: all var(--anim-medium) ease;
+}
+
+.v4-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-heavy);
+    border-color: var(--cyber-primary);
+}
+
+.v4-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--cyber-primary), var(--cyber-secondary));
+    box-shadow: var(--cyber-neon);
+}
+
+/* Typography */
+.v4-heading {
+    font-family: 'Orbitron', monospace;
+    color: var(--cyber-text);
+    margin-bottom: 1rem;
+    text-shadow: var(--cyber-neon);
+}
+
+.v4-heading-primary {
+    font-size: 2.5rem;
+    font-weight: 700;
+}
+
+.v4-heading-secondary {
+    font-size: 1.8rem;
+    font-weight: 600;
+}
+
+.v4-text {
+    color: var(--cyber-text-secondary);
+    line-height: 1.7;
+}
+
+.v4-text-primary {
+    color: var(--cyber-text);
+}
+
+/* Form Elements */
+.v4-form-group {
+    margin-bottom: 1.5rem;
+    position: relative;
+}
+
+.v4-form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--cyber-text);
+    font-weight: 600;
+    position: relative;
+}
+
+.v4-form-label::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 30px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--cyber-primary), var(--cyber-secondary));
+    border-radius: 1px;
+}
+
+.v4-form-control {
+    width: 100%;
+    padding: 12px 15px;
+    border-radius: 10px;
+    border: 2px solid var(--cyber-border);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--cyber-text);
+    font-size: 1rem;
+    transition: all var(--anim-medium) ease;
+    font-family: 'Exo 2', sans-serif;
+}
+
+.v4-form-control:focus {
+    outline: none;
+    border-color: var(--cyber-primary);
+    box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+    background: rgba(0, 0, 0, 0.5);
+    transform: translateY(-2px);
+}
+
+.v4-form-control::placeholder {
+    color: var(--cyber-text-secondary);
+}
+
+/* Buttons */
+.v4-btn {
+    padding: 12px 25px;
+    border-radius: 50px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--anim-medium) ease;
+    position: relative;
+    overflow: hidden;
+    font-family: 'Exo 2', sans-serif;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.v4-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: 0.5s;
+}
+
+.v4-btn:hover::before {
+    left: 100%;
+}
+
+.v4-btn-primary {
+    background: linear-gradient(45deg, var(--cyber-accent), var(--cyber-secondary));
+    color: white;
+    box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+}
+
+.v4-btn-primary:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
+}
+
+.v4-btn-secondary {
+    background: transparent;
+    color: var(--cyber-success);
+    border: 2px solid var(--cyber-success);
+}
+
+.v4-btn-secondary:hover {
+    background: var(--cyber-success);
+    color: var(--cyber-dark);
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(0, 255, 157, 0.4);
+}
+
+.v4-btn-success {
+    background: linear-gradient(45deg, var(--cyber-success), #34d399);
+    color: var(--cyber-dark);
+    box-shadow: 0 5px 15px rgba(0, 255, 157, 0.4);
+}
+
+.v4-btn-success:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0, 255, 157, 0.6);
+}
+
+/* Messages and Alerts */
+.v4-message {
+    padding: 15px 20px;
+    border-radius: 10px;
+    margin: 20px 0;
+    animation: slideInRight var(--anim-medium) ease-out;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.v4-message-success {
+    background: rgba(0, 255, 157, 0.15);
+    color: var(--cyber-success);
+    border: 1px solid rgba(0, 255, 157, 0.3);
+    box-shadow: 0 0 15px rgba(0, 255, 157, 0.2);
+}
+
+.v4-message-error {
+    background: rgba(255, 71, 87, 0.15);
+    color: var(--cyber-danger);
+    border: 1px solid rgba(255, 71, 87, 0.3);
+    box-shadow: 0 0 15px rgba(255, 71, 87, 0.2);
+}
+
+.v4-message-info {
+    background: rgba(0, 245, 255, 0.15);
+    color: var(--cyber-primary);
+    border: 1px solid rgba(0, 245, 255, 0.3);
+    box-shadow: 0 0 15px rgba(0, 245, 255, 0.2);
+}
+
+.v4-message-warning {
+    background: rgba(255, 204, 0, 0.15);
+    color: var(--cyber-warning);
+    border: 1px solid rgba(255, 204, 0, 0.3);
+    box-shadow: 0 0 15px rgba(255, 204, 0, 0.2);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+@keyframes cyberGlow {
+    0% { text-shadow: var(--cyber-neon); }
+    100% { text-shadow: 0 0 20px var(--cyber-accent), 0 0 40px var(--cyber-accent), 0 0 60px var(--cyber-accent); }
+}
+
+/* Utility Classes */
+.fade-in { animation: fadeIn var(--anim-medium) ease-out; }
+.fade-in-down { animation: fadeInDown var(--anim-medium) ease-out; }
+.fade-in-up { animation: fadeInUp var(--anim-medium) ease-out; }
+.pulse-animation { animation: pulse 2s infinite; }
+.cyber-glow-text { animation: cyberGlow 3s ease-in-out infinite alternate; }
+
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.2s; }
+.delay-3 { animation-delay: 0.3s; }
+.delay-4 { animation-delay: 0.4s; }
+.delay-5 { animation-delay: 0.5s; }
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .v4-container {
+        padding: 0 15px;
+    }
+    
+    .v4-card {
+        padding: 1.5rem;
+    }
+    
+    .v4-heading-primary {
+        font-size: 2rem;
+    }
+    
+    .v4-heading-secondary {
+        font-size: 1.5rem;
+    }
+    
+    .v4-btn {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+    }
+}
+
+/* Dark Mode Override */
+@media (prefers-color-scheme: dark) {
+    .v4-feature {
+        background: var(--cyber-darker);
+    }
+    
+    .v4-card {
+        background: var(--cyber-card);
+        border-color: var(--cyber-border);
+    }
+}

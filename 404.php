@@ -98,6 +98,37 @@ header('Cache-Control: no-cache, must-revalidate');
     <link rel="stylesheet" href="/assets/css/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        /* Cyberpunk Theme Integration */
+        :root {
+            --cyber-primary: #00f5ff;
+            --cyber-secondary: #ff00ff;
+            --cyber-accent: #ff6b6b;
+            --cyber-dark: #0a0a1a;
+            --cyber-darker: #050510;
+            --cyber-card: #121225;
+            --cyber-text: #ffffff;
+            --cyber-text-secondary: #a0a0c0;
+            --cyber-border: #2a2a4a;
+            --cyber-success: #00ff9d;
+            --cyber-warning: #ffcc00;
+            --cyber-danger: #ff4757;
+            --cyber-neon: 0 0 10px var(--cyber-primary), 0 0 20px var(--cyber-primary), 0 0 30px var(--cyber-primary);
+        }
+        
+        body {
+            font-family: 'Exo 2', sans-serif;
+            background: var(--cyber-dark);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(0, 245, 255, 0.1) 0%, transparent 20%),
+                radial-gradient(circle at 90% 80%, rgba(255, 0, 255, 0.1) 0%, transparent 20%);
+            color: var(--cyber-text);
+            line-height: 1.6;
+            min-height: 100vh;
+            overflow-x: hidden;
+            margin: 0;
+            padding: 0;
+        }
+        
         .error-container {
             min-height: 80vh;
             display: flex;
@@ -105,39 +136,73 @@ header('Cache-Control: no-cache, must-revalidate');
             justify-content: center;
             padding: 2rem;
         }
+        
         .error-content {
             text-align: center;
             max-width: 600px;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
+            background: var(--cyber-card);
+            backdrop-filter: blur(15px);
             border-radius: 20px;
             padding: 3rem;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid var(--cyber-border);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
         }
+        
+        .error-content::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--cyber-primary), var(--cyber-secondary));
+            box-shadow: var(--cyber-neon);
+        }
+        
         .error-code {
             font-size: 6rem;
             font-weight: 800;
-            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            font-family: 'Orbitron', monospace;
+            background: linear-gradient(45deg, var(--cyber-accent), var(--cyber-success));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: var(--cyber-neon);
             margin-bottom: 1rem;
-            text-shadow: 0 0 20px rgba(255, 107, 107, 0.3);
+            animation: cyberGlow 3s ease-in-out infinite alternate;
         }
+        
+        @keyframes cyberGlow {
+            0% { text-shadow: var(--cyber-neon); }
+            100% { text-shadow: 0 0 20px var(--cyber-accent), 0 0 40px var(--cyber-accent), 0 0 60px var(--cyber-accent); }
+        }
+        
         .error-title {
             font-size: 2rem;
+            font-weight: 700;
             margin-bottom: 1rem;
-            color: #fff;
+            color: var(--cyber-text);
+            font-family: 'Orbitron', monospace;
         }
+        
         .error-message {
             font-size: 1.1rem;
             margin-bottom: 2rem;
-            color: #ccc;
+            color: var(--cyber-text-secondary);
             line-height: 1.6;
         }
+        
         .suggestions {
             margin: 2rem 0;
             text-align: left;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 1.5rem;
+            border: 1px solid var(--cyber-border);
         }
+        
         .suggestion-item {
             padding: 0.8rem;
             margin: 0.5rem 0;
@@ -146,27 +211,36 @@ header('Cache-Control: no-cache, must-revalidate');
             border: 1px solid rgba(255, 255, 255, 0.1);
             transition: all 0.3s ease;
         }
+        
         .suggestion-item:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(0, 245, 255, 0.1);
             transform: translateX(5px);
+            border-color: var(--cyber-primary);
+            box-shadow: 0 0 15px rgba(0, 245, 255, 0.3);
         }
+        
         .suggestion-link {
-            color: #4ecdc4;
+            color: var(--cyber-success);
             text-decoration: none;
             display: flex;
             align-items: center;
             gap: 10px;
+            font-weight: 500;
         }
+        
         .suggestion-link:hover {
-            color: #ff6b6b;
+            color: var(--cyber-accent);
         }
+        
         .suggestion-type {
-            background: rgba(78, 205, 196, 0.2);
+            background: rgba(0, 255, 157, 0.2);
             padding: 2px 8px;
             border-radius: 15px;
             font-size: 0.8rem;
-            color: #4ecdc4;
+            color: var(--cyber-success);
+            border: 1px solid rgba(0, 255, 157, 0.3);
         }
+        
         .action-buttons {
             display: flex;
             gap: 1rem;
@@ -174,6 +248,7 @@ header('Cache-Control: no-cache, must-revalidate');
             flex-wrap: wrap;
             margin-top: 2rem;
         }
+        
         .btn {
             padding: 12px 25px;
             border-radius: 50px;
@@ -181,40 +256,84 @@ header('Cache-Control: no-cache, must-revalidate');
             font-weight: 600;
             transition: all 0.3s ease;
             border: 2px solid transparent;
+            position: relative;
+            overflow: hidden;
+            font-family: 'Exo 2', sans-serif;
         }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: 0.5s;
+        }
+        
+        .btn:hover::before {
+            left: 100%;
+        }
+        
         .btn-primary {
-            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            background: linear-gradient(45deg, var(--cyber-accent), var(--cyber-secondary));
             color: white;
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
         }
+        
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255, 107, 107, 0.6);
+        }
+        
         .btn-secondary {
             background: transparent;
-            color: #4ecdc4;
-            border-color: #4ecdc4;
+            color: var(--cyber-success);
+            border-color: var(--cyber-success);
         }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        
+        .btn-secondary:hover {
+            background: var(--cyber-success);
+            color: var(--cyber-dark);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 255, 157, 0.4);
         }
+        
         .search-box {
             margin: 2rem 0;
         }
+        
         .search-input {
             width: 100%;
             padding: 15px;
             border-radius: 50px;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            background: rgba(0, 0, 0, 0.2);
-            color: white;
+            border: 2px solid var(--cyber-border);
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--cyber-text);
             font-size: 1.1rem;
             outline: none;
             transition: all 0.3s ease;
+            font-family: 'Exo 2', sans-serif;
         }
+        
         .search-input:focus {
-            border-color: #4ecdc4;
-            box-shadow: 0 0 20px rgba(78, 205, 196, 0.3);
+            border-color: var(--cyber-primary);
+            box-shadow: 0 0 20px rgba(0, 245, 255, 0.3);
+            background: rgba(0, 0, 0, 0.5);
         }
+        
         .search-input::placeholder {
-            color: rgba(255, 255, 255, 0.5);
+            color: var(--cyber-text-secondary);
+        }
+        
+        #particles-js {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: -1;
         }
     </style>
 </head>
