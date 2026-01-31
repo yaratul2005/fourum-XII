@@ -1,3 +1,4 @@
+<?php
 // Enhanced Profile Editor with Improved Image Upload and Validation
 // Define NO_CACHE to prevent cache headers on this page
 define('NO_CACHE', true);

@@ -11,7 +11,7 @@ $categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $title = sanitize_input($_POST['title'] ?? '');
-    $content = sanitize_input($_POST['content'] ?? '');
+    $content = $_POST['content'] ?? ''; // Don't sanitize rich text content
     $category = sanitize_input($_POST['category'] ?? 'general');
     
     // Validation
@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     if (empty($content)) {
         $errors[] = 'Content is required';
-    } elseif (strlen($content) < 10) {
+    } elseif (strlen(strip_tags($content)) < 10) {
         $errors[] = 'Content must be at least 10 characters';
     }
     
@@ -62,6 +62,125 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <title>Create Post - <?php echo SITE_NAME; ?></title>
     <link rel="stylesheet" href="assets/css/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Quill.js Rich Text Editor -->
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    <style>
+        /* Rich Text Editor Custom Styles */
+        .ql-toolbar {
+            border: 1px solid var(--border-color);
+            border-radius: 8px 8px 0 0;
+            background: var(--card-bg);
+        }
+        
+        .ql-container {
+            border: 1px solid var(--border-color);
+            border-radius: 0 0 8px 8px;
+            border-top: none;
+            background: var(--card-bg);
+            color: var(--text-primary);
+            font-family: inherit;
+        }
+        
+        .ql-editor {
+            min-height: 200px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .ql-editor p {
+            margin: 0 0 1rem 0;
+            line-height: 1.6;
+        }
+        
+        .ql-editor h1, .ql-editor h2, .ql-editor h3 {
+            margin: 1.5rem 0 1rem 0;
+            color: var(--primary);
+        }
+        
+        .ql-editor ul, .ql-editor ol {
+            margin: 1rem 0;
+            padding-left: 2rem;
+        }
+        
+        .ql-editor li {
+            margin: 0.25rem 0;
+        }
+        
+        .ql-editor a {
+            color: var(--primary);
+            text-decoration: underline;
+        }
+        
+        .ql-editor blockquote {
+            border-left: 3px solid var(--primary);
+            margin: 1rem 0;
+            padding-left: 1rem;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+        
+        .ql-editor code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .ql-editor pre {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        
+        .editor-toolbar {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .editor-action-btn {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+        
+        .editor-action-btn:hover {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: var(--darker-bg);
+        }
+        
+        .editor-stats {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+        
+        /* Preview Modal Styles */
+        #preview-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+        
+        #preview-content .ql-syntax {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
 </head>
 <body>
     <!-- Header -->
@@ -163,15 +282,44 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     
                     <div class="form-group">
                         <label for="content" class="form-label">Content *</label>
-                        <textarea id="content" name="content" class="form-textarea" 
-                                  required minlength="10" 
-                                  placeholder="Share your thoughts, questions, or ideas with the community..."><?php echo htmlspecialchars($_POST['content'] ?? ''); ?></textarea>
-                        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem;">
+                        
+                        <!-- Rich Text Editor Toolbar -->
+                        <div class="editor-toolbar">
+                            <button type="button" class="editor-action-btn" id="bold-btn" title="Bold">
+                                <i class="fas fa-bold"></i>
+                            </button>
+                            <button type="button" class="editor-action-btn" id="italic-btn" title="Italic">
+                                <i class="fas fa-italic"></i>
+                            </button>
+                            <button type="button" class="editor-action-btn" id="underline-btn" title="Underline">
+                                <i class="fas fa-underline"></i>
+                            </button>
+                            <button type="button" class="editor-action-btn" id="link-btn" title="Insert Link">
+                                <i class="fas fa-link"></i>
+                            </button>
+                            <button type="button" class="editor-action-btn" id="image-btn" title="Insert Image">
+                                <i class="fas fa-image"></i>
+                            </button>
+                            <button type="button" class="editor-action-btn" id="code-btn" title="Code Block">
+                                <i class="fas fa-code"></i>
+                            </button>
+                            <button type="button" class="editor-action-btn" id="blockquote-btn" title="Blockquote">
+                                <i class="fas fa-quote-right"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Hidden textarea for form submission -->
+                        <textarea id="content" name="content" style="display: none;"><?php echo htmlspecialchars($_POST['content'] ?? ''); ?></textarea>
+                        
+                        <!-- Quill Editor Container -->
+                        <div id="editor-container" style="height: 300px;">
+                            <?php echo $_POST['content'] ?? ''; ?>
+                        </div>
+                        
+                        <div class="editor-stats">
+                            <small id="content-stats">Characters: 0 | Words: 0</small>
                             <small style="color: var(--text-secondary); font-size: 0.8rem;">
                                 Minimum 10 characters
-                            </small>
-                            <small id="content-counter" style="color: var(--text-secondary); font-size: 0.8rem;">
-                                0 characters
                             </small>
                         </div>
                     </div>
@@ -183,6 +331,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             </button>
                             <button type="button" id="preview-btn" class="btn btn-outline" style="flex: 1; min-width: 200px;">
                                 <i class="fas fa-eye"></i> Preview
+                            </button>
+                            <button type="button" id="clear-btn" class="btn btn-danger" style="flex: 1; min-width: 200px;">
+                                <i class="fas fa-trash"></i> Clear Content
                             </button>
                         </div>
                     </div>
@@ -213,7 +364,80 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     <script src="assets/js/main.js"></script>
     <script>
-        // Character counters
+        // Initialize Quill Editor
+        const quill = new Quill('#editor-container', {
+            theme: 'snow',
+            modules: {
+                toolbar: false // We'll use custom toolbar
+            },
+            placeholder: 'Share your thoughts, questions, or ideas with the community...'
+        });
+        
+        // Set initial content
+        const initialContent = document.getElementById('content').value;
+        if (initialContent) {
+            quill.root.innerHTML = initialContent;
+        }
+        
+        // Update hidden textarea on content change
+        quill.on('text-change', function() {
+            document.getElementById('content').value = quill.root.innerHTML;
+            updateEditorStats();
+        });
+        
+        // Custom toolbar buttons
+        document.getElementById('bold-btn').addEventListener('click', function() {
+            quill.format('bold', !quill.getFormat().bold);
+        });
+        
+        document.getElementById('italic-btn').addEventListener('click', function() {
+            quill.format('italic', !quill.getFormat().italic);
+        });
+        
+        document.getElementById('underline-btn').addEventListener('click', function() {
+            quill.format('underline', !quill.getFormat().underline);
+        });
+        
+        document.getElementById('link-btn').addEventListener('click', function() {
+            const url = prompt('Enter URL:');
+            if (url) {
+                quill.format('link', url);
+            }
+        });
+        
+        document.getElementById('image-btn').addEventListener('click', function() {
+            const url = prompt('Enter image URL:');
+            if (url) {
+                const range = quill.getSelection();
+                quill.insertEmbed(range.index, 'image', url);
+            }
+        });
+        
+        document.getElementById('code-btn').addEventListener('click', function() {
+            const range = quill.getSelection();
+            if (range) {
+                quill.formatLine(range.index, range.length, 'code-block', true);
+            }
+        });
+        
+        document.getElementById('blockquote-btn').addEventListener('click', function() {
+            const range = quill.getSelection();
+            if (range) {
+                quill.formatLine(range.index, range.length, 'blockquote', true);
+            }
+        });
+        
+        // Update editor statistics
+        function updateEditorStats() {
+            const text = quill.getText();
+            const charCount = text.length - 1; // Subtract 1 for newline
+            const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+            
+            document.getElementById('content-stats').textContent = 
+                `Characters: ${charCount} | Words: ${wordCount}`;
+        }
+        
+        // Character counter for title
         document.getElementById('title').addEventListener('input', function() {
             const counter = document.getElementById('title-counter');
             counter.textContent = `${this.value.length}/200`;
@@ -227,21 +451,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         });
         
-        document.getElementById('content').addEventListener('input', function() {
-            const counter = document.getElementById('content-counter');
-            counter.textContent = `${this.value.length} characters`;
-            
-            if (this.value.length < 10) {
-                counter.style.color = 'var(--danger)';
-            } else {
-                counter.style.color = 'var(--text-secondary)';
-            }
-        });
-        
         // Preview functionality
         document.getElementById('preview-btn').addEventListener('click', function() {
             const title = document.getElementById('title').value;
-            const content = document.getElementById('content').value;
+            const content = quill.root.innerHTML;
             const category = document.getElementById('category').value;
             
             if (!title.trim() || !content.trim()) {
@@ -264,12 +477,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                     <h2 style="color: var(--text-primary); margin: 0.5rem 0; font-size: 1.5rem;">${title}</h2>
                 </div>
-                <div style="color: var(--text-secondary); line-height: 1.7; white-space: pre-wrap;">${content}</div>
+                <div style="color: var(--text-secondary); line-height: 1.7;">${content}</div>
             `;
             
             document.getElementById('preview-modal').style.display = 'flex';
         });
         
+        // Clear content functionality
+        document.getElementById('clear-btn').addEventListener('click', function() {
+            if (confirm('Are you sure you want to clear all content?')) {
+                quill.setContents([{ insert: '\n' }]);
+                document.getElementById('title').value = '';
+                document.getElementById('category').selectedIndex = 0;
+                updateEditorStats();
+            }
+        });
+        
+        // Close preview modal
         document.getElementById('close-preview').addEventListener('click', function() {
             document.getElementById('preview-modal').style.display = 'none';
         });
@@ -288,7 +512,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if (savedData) {
                 showNotification('Draft loaded from auto-save', 'info');
             }
+            
+            // Initialize stats
+            updateEditorStats();
+        });
+        
+        // Form submission validation
+        document.getElementById('create-post-form').addEventListener('submit', function(e) {
+            const content = quill.root.innerHTML;
+            const textContent = quill.getText().trim();
+            
+            if (textContent.length < 10) {
+                e.preventDefault();
+                alert('Content must be at least 10 characters long');
+                return false;
+            }
+            
+            // Update the hidden textarea with final content
+            document.getElementById('content').value = content;
         });
     </script>
+    <!-- Quill.js Rich Text Editor -->
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    <script src="assets/js/main.js"></script>
 </body>
 </html>
