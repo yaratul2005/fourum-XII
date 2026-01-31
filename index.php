@@ -67,7 +67,7 @@ $top_users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="container">
             <div class="header-content">
                 <div class="logo">
-                    <h1><i class="fas fa-robot"></i> FUROM</h1>
+                    <h1><i class="fas fa-robot"></i> FUROM <span class="version-badge">V2</span></h1>
                     <span class="tagline">Futuristic Community Platform</span>
                 </div>
                 
@@ -272,8 +272,11 @@ $top_users = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <div class="container">
             <div class="footer-content">
                 <div class="footer-section">
-                    <h3><i class="fas fa-robot"></i> FUROM</h3>
+                    <h3><i class="fas fa-robot"></i> FUROM <span class="version-tag">V2.0</span></h3>
                     <p>The next-generation community platform built for the future.</p>
+                    <div class="upgrade-notice">
+                        <small>✨ Now featuring enhanced animations and super transitions!</small>
+                    </div>
                 </div>
                 <div class="footer-section">
                     <h4>Quick Links</h4>
@@ -281,6 +284,7 @@ $top_users = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <li><a href="about.php">About</a></li>
                         <li><a href="rules.php">Community Rules</a></li>
                         <li><a href="privacy.php">Privacy Policy</a></li>
+                        <li><a href="changelog.php">What's New (V2)</a></li>
                     </ul>
                 </div>
                 <div class="footer-section">
