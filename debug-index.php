@@ -4,6 +4,9 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 ini_set('log_errors', 1);
 
+// Start output buffering to handle session warnings
+ob_start();
+
 echo "<h2>Debug Index.php - Detailed Error Report</h2>";
 echo "<p><strong>PHP Version:</strong> " . PHP_VERSION . "</p>";
 echo "<p><strong>Current Time:</strong> " . date('Y-m-d H:i:s') . "</p>";
@@ -25,6 +28,9 @@ try {
     echo "Stack trace: " . nl2br($e->getTraceAsString()) . "<br>";
     die();
 }
+
+// Flush output buffer to send headers
+ob_end_flush();
 
 // Step 2: Database connection
 echo "<h3>Step 2: Database Connection</h3>";
@@ -62,18 +68,26 @@ try {
     echo "Where clause: $where_clause<br>";
     echo "Parameters: " . json_encode($params) . "<br>";
     
-    // Main query
+    // Main query - FIXED: Proper parameter binding for LIMIT/OFFSET
     $query = "SELECT p.*, u.username, u.exp, 
               (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 'active') as comment_count
               FROM posts p 
               JOIN users u ON p.user_id = u.id 
               $where_clause 
               ORDER BY p.score DESC, p.created_at DESC 
-              LIMIT ? OFFSET ?";
+              LIMIT :limit OFFSET :offset";
     
     echo "Executing main query...<br>";
     $stmt = $pdo->prepare($query);
-    $stmt->execute(array_merge($params, [$limit, $offset]));
+    
+    // Bind parameters properly
+    foreach($params as $key => $param) {
+        $stmt->bindValue($key + 1, $param);
+    }
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    
+    $stmt->execute();
     $posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
     echo "✅ Main query executed successfully<br>";

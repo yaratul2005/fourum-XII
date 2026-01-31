@@ -22,10 +22,18 @@ $query = "SELECT p.*, u.username, u.exp,
           JOIN users u ON p.user_id = u.id 
           $where_clause 
           ORDER BY p.score DESC, p.created_at DESC 
-          LIMIT ? OFFSET ?";
+          LIMIT :limit OFFSET :offset";
 
 $stmt = $pdo->prepare($query);
-$stmt->execute(array_merge($params, [$limit, $offset]));
+
+// Bind parameters properly to avoid SQL syntax errors
+foreach($params as $key => $param) {
+    $stmt->bindValue($key + 1, $param);
+}
+$stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+
+$stmt->execute();
 $posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 // Get total posts count for pagination
