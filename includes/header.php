@@ -15,15 +15,9 @@ if (is_logged_in()) {
 <header class="cyber-header">
     <div class="container">
         <div class="header-content">
-            <!-- Site Branding -->
-            <div class="site-branding">
-                <div class="logo">
-                    <h1><i class="fas fa-robot"></i> FUROM</h1>
-                </div>
-                <div class="site-title">
-                    <h2><?php echo htmlspecialchars(SITE_NAME); ?></h2>
-                    <p class="tagline">Futuristic Community Platform</p>
-                </div>
+            <!-- Minimal Site Branding -->
+            <div class="logo">
+                <h1><i class="fas fa-robot"></i> FUROM</h1>
             </div>
             
             <!-- Search Box -->
@@ -56,108 +50,25 @@ if (is_logged_in()) {
                 
                 <div class="user-actions">
                     <?php if (is_logged_in()): ?>
-                        <!-- Notifications Bell -->
-                        <div class="notifications-container">
-                            <button class="notification-bell <?php echo $unread_count > 0 ? 'has-unread' : ''; ?>" id="notificationBell">
-                                <i class="fas fa-bell"></i>
-                                <?php if ($unread_count > 0): ?>
-                                    <span class="notification-count"><?php echo min($unread_count, 99); ?></span>
-                                <?php endif; ?>
-                            </button>
-                            
-                            <div class="notifications-dropdown" id="notificationsDropdown">
-                                <div class="notifications-header">
-                                    <h3>Notifications</h3>
-                                    <?php if ($unread_count > 0): ?>
-                                        <button class="mark-all-read" id="markAllRead">
-                                            <i class="fas fa-check-double"></i> Mark all as read
-                                        </button>
-                                    <?php endif; ?>
-                                </div>
-                                
-                                <div class="notifications-list">
-                                    <?php if (empty($user_notifications)): ?>
-                                        <div class="no-notifications">
-                                            <i class="fas fa-inbox"></i>
-                                            <p>No new notifications</p>
-                                        </div>
-                                    <?php else: ?>
-                                        <?php foreach ($user_notifications as $notification): ?>
-                                            <div class="notification-item" data-notification-id="<?php echo $notification['id']; ?>">
-                                                <div class="notification-icon">
-                                                    <?php
-                                                    switch ($notification['type']) {
-                                                        case 'kyc_update': echo '<i class="fas fa-id-card"></i>'; break;
-                                                        case 'category_approved': echo '<i class="fas fa-check-circle"></i>'; break;
-                                                        case 'category_rejected': echo '<i class="fas fa-times-circle"></i>'; break;
-                                                        case 'post_featured': echo '<i class="fas fa-star"></i>'; break;
-                                                        case 'mention': echo '<i class="fas fa-at"></i>'; break;
-                                                        case 'reply': echo '<i class="fas fa-reply"></i>'; break;
-                                                        default: echo '<i class="fas fa-bell"></i>';
-                                                    }
-                                                    ?>
-                                                </div>
-                                                <div class="notification-content">
-                                                    <h4><?php echo htmlspecialchars($notification['title']); ?></h4>
-                                                    <p><?php echo htmlspecialchars($notification['message']); ?></p>
-                                                    <small><?php echo time_ago($notification['created_at']); ?></small>
-                                                </div>
-                                                <button class="mark-read" data-notification-id="<?php echo $notification['id']; ?>">
-                                                    <i class="fas fa-check"></i>
-                                                </button>
-                                            </div>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </div>
-                                
-                                <div class="notifications-footer">
-                                    <a href="notifications.php">View all notifications</a>
-                                </div>
-                            </div>
-                        </div>
-                        
                         <a href="create-post.php" class="btn btn-primary post-now-btn">
                             <i class="fas fa-plus"></i> Post Now
                         </a>
-                        
                         <div class="user-dropdown">
                             <button class="user-menu-btn">
-                                <img src="<?php echo htmlspecialchars($current_user['avatar'] ?? 'assets/images/default-avatar.png'); ?>" 
+                                <img src="<?php echo get_user_data(get_current_user_id())['avatar'] ?: 'assets/images/default-avatar.png'; ?>" 
                                      alt="Avatar" class="user-avatar">
-                                <span class="username"><?php echo htmlspecialchars($current_user['username']); ?></span>
+                                <span><?php echo htmlspecialchars($_SESSION['username']); ?></span>
                                 <i class="fas fa-chevron-down"></i>
                             </button>
                             <div class="dropdown-menu">
-                                <a href="profile.php?id=<?php echo $current_user['id']; ?>">
-                                    <i class="fas fa-user"></i> Profile
-                                </a>
-                                <a href="profile-edit.php">
-                                    <i class="fas fa-cog"></i> Settings
-                                </a>
-                                <?php if ($current_user['kyc_status'] === 'verified'): ?>
-                                    <a href="kyc-submit.php">
-                                        <i class="fas fa-id-card"></i> KYC Status
-                                    </a>
-                                <?php elseif ($current_user['exp'] >= (int)get_setting('kyc_min_level', 500)): ?>
-                                    <a href="kyc-submit.php">
-                                        <i class="fas fa-id-card"></i> Verify Identity
-                                    </a>
-                                <?php endif; ?>
-                                <?php if ($current_user['username'] === 'admin'): ?>
-                                    <a href="admin/dashboard.php">
-                                        <i class="fas fa-shield-alt"></i> Admin Panel
-                                    </a>
-                                <?php endif; ?>
-                                <hr>
-                                <a href="logout.php">
-                                    <i class="fas fa-sign-out-alt"></i> Logout
-                                </a>
+                                <a href="profile.php?id=<?php echo get_current_user_id(); ?>"><i class="fas fa-user"></i> My Profile</a>
+                                <a href="profile-edit.php"><i class="fas fa-user-edit"></i> Edit Profile</a>
+                                <a href="settings.php"><i class="fas fa-cog"></i> Settings</a>
+                                <div class="dropdown-divider"></div>
+                                <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
                             </div>
                         </div>
                     <?php else: ?>
-                        <a href="create-post.php" class="btn btn-primary post-now-btn" onclick="handleGuestPost(); return false;">
-                            <i class="fas fa-plus"></i> Post Now
-                        </a>
                         <a href="login.php" class="btn btn-outline">Login</a>
                         <a href="register.php" class="btn btn-primary">Register</a>
                     <?php endif; ?>
@@ -483,6 +394,9 @@ if (is_logged_in()) {
     background: rgba(255, 255, 255, 0.1);
 }
 </style>
+
+<script src="assets/js/main.js"></script>
+<script src="assets/js/mobile-enhancements.js"></script>
 
 <script>
 // Handle guest users trying to post

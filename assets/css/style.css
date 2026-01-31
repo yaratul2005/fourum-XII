@@ -1,3 +1,11 @@
+/* 
+ * Furom Main Stylesheet - V5
+ * Includes all core styling and mobile responsiveness
+ */
+
+/* Import mobile fixes */
+@import url('mobile-fixes.css');
+
 /* Furom V2 - Enhanced Futuristic Forum CSS */
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600&display=swap');
 
@@ -1376,84 +1384,53 @@ body::before {
 }
 
 @media (max-width: 768px) {
+    /* Override any conflicting styles */
     .content-wrapper {
-        grid-template-columns: 1fr;
-        gap: 1.5rem;
+        grid-template-columns: 1fr !important;
+        gap: 1.5rem !important;
     }
     
     .sidebar {
-        order: 2;
-        position: static;
+        order: 2 !important;
+        position: static !important;
     }
     
     .main-feed {
-        order: 1;
+        order: 1 !important;
     }
     
+    /* Ensure mobile menu is accessible */
     .main-nav {
-        display: none;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        gap: 0.5rem !important;
+        width: 100% !important;
     }
     
-    .header-content {
-        flex-direction: column;
-        gap: 1.25rem;
-        text-align: center;
-    }
-    
-    .logo h1 {
-        font-size: 1.8rem;
-    }
-    
-    .post-card {
-        flex-direction: column;
-    }
-    
-    .post-vote {
-        flex-direction: row;
-        justify-content: center;
-        min-width: auto;
-        padding: 1rem;
-        gap: 2rem;
-    }
-    
-    .pagination {
-        flex-wrap: wrap;
-        gap: 0.75rem;
-    }
-    
-    .feed-header {
-        flex-direction: column;
-        gap: 1rem;
-        text-align: center;
-    }
-    
-    .post-meta {
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 0.75rem;
+    .nav-link {
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.9rem !important;
+        flex: 1 !important;
+        text-align: center !important;
+        min-width: 80px !important;
     }
 }
 
 @media (max-width: 480px) {
+    /* Ultra-mobile optimizations */
     .container {
-        padding: 0 10px;
+        padding: 0 8px !important;
     }
     
-    .post-content {
-        padding: 1.5rem;
-    }
-    
-    .widget {
-        padding: 1.25rem;
+    .post-card {
+        padding: 1rem !important;
     }
     
     .btn {
-        padding: 0.75rem 1.25rem;
-        font-size: 0.9rem;
-    }
-    
-    .post-title a {
-        font-size: 1.3rem;
+        padding: 0.6rem 1rem !important;
+        font-size: 0.85rem !important;
+        min-width: 100px !important;
     }
 }
 

@@ -1,5 +1,5 @@
 <?php
-// Google OAuth Callback Handler
+// Google OAuth Callback Handler - Enhanced with Better Error Handling
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -9,11 +9,11 @@ try {
     require_once '../../config.php';
     require_once '../../includes/functions.php';
     
-    // Get Google configuration
+    // Get Google configuration with better error handling
     $google_config = get_google_config();
     
     if (!$google_config['enabled'] || empty($google_config['client_id']) || empty($google_config['client_secret'])) {
-        throw new Exception('Google authentication is not properly configured');
+        throw new Exception('Google authentication is not properly configured. Please check admin settings.');
     }
     
     // Check for authorization code
@@ -21,7 +21,7 @@ try {
         if (isset($_GET['error'])) {
             throw new Exception('Google authentication failed: ' . $_GET['error']);
         }
-        throw new Exception('No authorization code received');
+        throw new Exception('No authorization code received from Google');
     }
     
     $auth_code = $_GET['code'];
@@ -42,18 +42,26 @@ try {
     curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($token_data));
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     
     $token_response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_error = curl_error($ch);
     curl_close($ch);
     
+    if ($curl_error) {
+        throw new Exception('cURL error during token exchange: ' . $curl_error);
+    }
+    
     if ($http_code !== 200) {
-        throw new Exception('Failed to exchange authorization code for token');
+        $error_details = json_decode($token_response, true);
+        $error_msg = isset($error_details['error_description']) ? $error_details['error_description'] : 'Unknown error';
+        throw new Exception("Failed to exchange authorization code for token (HTTP $http_code): $error_msg");
     }
     
     $token_info = json_decode($token_response, true);
     if (!$token_info || !isset($token_info['access_token'])) {
-        throw new Exception('Invalid token response from Google');
+        throw new Exception('Invalid token response from Google: ' . ($token_response ?: 'Empty response'));
     }
     
     // Get user info from Google
@@ -64,18 +72,29 @@ try {
     curl_setopt($ch, CURLOPT_URL, $user_info_url);
     curl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer $access_token"]);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     
     $user_response = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_error = curl_error($ch);
     curl_close($ch);
     
+    if ($curl_error) {
+        throw new Exception('cURL error during user info retrieval: ' . $curl_error);
+    }
+    
     if ($http_code !== 200) {
-        throw new Exception('Failed to retrieve user information from Google');
+        throw new Exception("Failed to retrieve user information from Google (HTTP $http_code)");
     }
     
     $user_info = json_decode($user_response, true);
     if (!$user_info || !isset($user_info['email'])) {
-        throw new Exception('Invalid user information from Google');
+        throw new Exception('Invalid user information received from Google');
+    }
+    
+    // Validate required user information
+    if (empty($user_info['email']) || !filter_var($user_info['email'], FILTER_VALIDATE_EMAIL)) {
+        throw new Exception('Invalid email address received from Google');
     }
     
     // Check if user already exists
@@ -101,7 +120,7 @@ try {
         $verification_token = bin2hex(random_bytes(32));
         
         $stmt = $pdo->prepare("INSERT INTO users (username, email, password, verification_token, verified, avatar, exp, created_at) VALUES (?, ?, ?, ?, 1, ?, 10, NOW())");
-        $stmt->execute([
+        $result = $stmt->execute([
             $username,
             $user_info['email'],
             $password,
@@ -109,11 +128,17 @@ try {
             $user_info['picture'] ?? null
         ]);
         
+        if (!$result) {
+            throw new Exception('Failed to create user account in database');
+        }
+        
         $user_id = $pdo->lastInsertId();
         $_SESSION['user_id'] = $user_id;
         
-        // Redirect to profile setup
-        header("Location: /profile-setup.php?new_user=1");
+        // Redirect to profile setup or home
+        $redirect_url = $_SESSION['login_redirect'] ?? '/';
+        unset($_SESSION['login_redirect']);
+        header("Location: $redirect_url");
         exit();
     }
     
@@ -127,14 +152,37 @@ try {
 function get_google_config() {
     global $pdo;
     try {
-        $stmt = $pdo->query("SELECT * FROM settings WHERE setting_key LIKE 'google_%'");
+        // Check if settings table exists first
+        $stmt = $pdo->query("SHOW TABLES LIKE 'settings'");
+        if ($stmt->rowCount() == 0) {
+            error_log("Settings table does not exist");
+            return ['enabled' => 0, 'client_id' => '', 'client_secret' => '', 'redirect_uri' => ''];
+        }
+        
+        $stmt = $pdo->prepare("SELECT * FROM settings WHERE setting_key LIKE 'google_%'");
+        $stmt->execute();
         $config = [];
         while ($row = $stmt->fetch()) {
             $config[str_replace('google_', '', $row['setting_key'])] = $row['setting_value'];
         }
-        return $config;
+        
+        // Ensure we have all required keys with defaults
+        $defaults = [
+            'enabled' => 0,
+            'client_id' => '',
+            'client_secret' => '',
+            'redirect_uri' => ''
+        ];
+        
+        return array_merge($defaults, $config);
     } catch (Exception $e) {
-        return ['enabled' => 0, 'client_id' => '', 'client_secret' => '', 'redirect_uri' => ''];
+        error_log("Google config retrieval error: " . $e->getMessage());
+        return [
+            'enabled' => 0,
+            'client_id' => '',
+            'client_secret' => '',
+            'redirect_uri' => ''
+        ];
     }
 }
 

@@ -1,0 +1,608 @@
+/* 
+ * Furom Mobile Responsiveness Fixes - V5
+ * Comprehensive mobile optimization for all screen sizes
+ */
+
+/* Base mobile optimizations */
+@media (max-width: 768px) {
+    /* Global mobile adjustments */
+    * {
+        -webkit-tap-highlight-color: transparent;
+    }
+    
+    body {
+        font-size: 16px; /* Prevents iOS zoom on input focus */
+        -webkit-text-size-adjust: 100%;
+        -moz-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+    }
+    
+    /* Header mobile optimization */
+    .cyber-header {
+        padding: 10px 0;
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+        backdrop-filter: blur(10px);
+    }
+    
+    .header-content {
+        flex-direction: column;
+        gap: 15px;
+        padding: 0 15px;
+    }
+    
+    /* Site branding adjustments */
+    .site-branding {
+        flex-direction: column;
+        text-align: center;
+        gap: 8px;
+    }
+    
+    .logo h1 {
+        font-size: 1.8rem;
+        margin: 0;
+    }
+    
+    .site-title h2 {
+        font-size: 1.3rem;
+        margin: 0;
+    }
+    
+    .tagline {
+        font-size: 0.9rem;
+    }
+    
+    /* Search container mobile */
+    .search-container {
+        width: 100%;
+        max-width: 100%;
+    }
+    
+    .search-wrapper {
+        max-width: 100%;
+    }
+    
+    .search-input {
+        font-size: 16px; /* Prevents zoom */
+        padding: 12px 15px;
+    }
+    
+    /* Header actions stacking */
+    .header-actions {
+        flex-direction: column;
+        gap: 15px;
+        width: 100%;
+    }
+    
+    .main-nav {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+    }
+    
+    .nav-link {
+        padding: 8px 12px;
+        font-size: 0.9rem;
+    }
+    
+    /* User actions mobile */
+    .user-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+    }
+    
+    .btn {
+        padding: 10px 15px;
+        font-size: 0.9rem;
+        flex: 1;
+        min-width: 120px;
+        text-align: center;
+    }
+    
+    /* User dropdown mobile */
+    .user-dropdown {
+        width: 100%;
+    }
+    
+    .user-menu-btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .dropdown-menu {
+        position: fixed;
+        top: 60px;
+        left: 15px;
+        right: 15px;
+        width: auto;
+        max-width: none;
+    }
+    
+    /* Main content mobile */
+    .main-container {
+        padding: 15px;
+    }
+    
+    .container {
+        padding: 0 10px;
+    }
+    
+    /* Content wrapper mobile */
+    .content-wrapper {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .sidebar {
+        order: 2;
+        position: static;
+        width: 100%;
+    }
+    
+    .main-feed {
+        order: 1;
+    }
+    
+    /* Widget mobile optimization */
+    .widget {
+        margin-bottom: 20px;
+        padding: 20px;
+    }
+    
+    .widget h3 {
+        font-size: 1.3rem;
+        margin-bottom: 15px;
+    }
+    
+    /* Post card mobile */
+    .post-card {
+        flex-direction: column;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .post-vote {
+        flex-direction: row;
+        justify-content: center;
+        padding: 15px;
+        gap: 30px;
+        min-width: auto;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 15px;
+    }
+    
+    .vote-btn {
+        padding: 12px;
+        font-size: 1.2rem;
+    }
+    
+    .post-content {
+        padding: 0;
+        flex: 1;
+    }
+    
+    .post-title {
+        font-size: 1.4rem;
+        margin-bottom: 12px;
+    }
+    
+    .post-excerpt {
+        font-size: 1rem;
+        line-height: 1.5;
+    }
+    
+    .post-meta {
+        flex-wrap: wrap;
+        gap: 12px;
+        font-size: 0.9rem;
+    }
+    
+    /* Feed header mobile */
+    .feed-header {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+        padding: 20px;
+    }
+    
+    .feed-title {
+        font-size: 1.8rem;
+    }
+    
+    .feed-description {
+        font-size: 1rem;
+    }
+    
+    .feed-controls {
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: center;
+    }
+    
+    /* Pagination mobile */
+    .pagination {
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+    }
+    
+    .page-link {
+        padding: 10px 15px;
+        font-size: 0.9rem;
+        min-width: 40px;
+    }
+    
+    /* Form containers mobile */
+    .form-container {
+        padding: 20px;
+        margin: 15px auto;
+    }
+    
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .form-input, .form-textarea, .form-select {
+        font-size: 16px;
+        padding: 12px 15px;
+    }
+    
+    /* Profile edit mobile */
+    .profile-edit-container {
+        padding: 15px;
+        margin: 1rem auto;
+    }
+    
+    .avatar-preview {
+        width: 120px;
+        height: 120px;
+    }
+    
+    .form-section {
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    /* Category page mobile */
+    .category-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .category-card {
+        padding: 20px;
+    }
+    
+    .category-name {
+        font-size: 1.3rem;
+    }
+    
+    /* Notification system mobile */
+    .notifications-dropdown {
+        width: calc(100vw - 30px);
+        right: 15px;
+        left: 15px;
+        max-width: 350px;
+    }
+    
+    .notification-item {
+        padding: 12px 15px;
+    }
+    
+    /* Floating notifications mobile */
+    .floating-notifications {
+        width: calc(100vw - 30px);
+        right: 15px;
+        left: 15px;
+        max-width: 350px;
+    }
+    
+    .floating-notification {
+        margin-bottom: 10px;
+    }
+    
+    /* Admin panel mobile */
+    .admin-layout {
+        flex-direction: column;
+    }
+    
+    .admin-sidebar {
+        width: 100%;
+        height: auto;
+        position: relative;
+        border-right: none;
+        border-bottom: 1px solid var(--admin-border);
+    }
+    
+    .sidebar-header {
+        padding: 20px;
+    }
+    
+    .admin-main {
+        margin-left: 0;
+        padding: 15px;
+    }
+    
+    .admin-header {
+        padding: 20px 15px;
+    }
+    
+    .admin-content {
+        padding: 0 10px;
+    }
+    
+    /* Table mobile optimization */
+    .admin-table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .admin-table th,
+    .admin-table td {
+        white-space: nowrap;
+    }
+    
+    /* Footer mobile */
+    .cyber-footer {
+        padding: 30px 15px;
+    }
+    
+    .footer-content {
+        grid-template-columns: 1fr;
+        gap: 25px;
+        text-align: center;
+    }
+    
+    .footer-section {
+        padding: 0;
+    }
+    
+    .social-links {
+        justify-content: center;
+    }
+    
+    .footer-bottom {
+        text-align: center;
+        padding-top: 20px;
+    }
+}
+
+/* Small mobile devices (480px and below) */
+@media (max-width: 480px) {
+    .container {
+        padding: 0 8px;
+    }
+    
+    .main-container {
+        padding: 12px;
+    }
+    
+    /* Even smaller header */
+    .header-content {
+        padding: 0 10px;
+        gap: 12px;
+    }
+    
+    .logo h1 {
+        font-size: 1.5rem;
+    }
+    
+    .site-title h2 {
+        font-size: 1.1rem;
+    }
+    
+    .tagline {
+        font-size: 0.8rem;
+    }
+    
+    /* Compact buttons */
+    .btn {
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        min-width: 100px;
+    }
+    
+    /* Smaller post cards */
+    .post-card {
+        padding: 15px;
+    }
+    
+    .post-vote {
+        padding: 12px;
+        gap: 20px;
+    }
+    
+    .vote-btn {
+        padding: 10px;
+        font-size: 1.1rem;
+    }
+    
+    .post-title {
+        font-size: 1.2rem;
+    }
+    
+    /* Compact forms */
+    .form-container {
+        padding: 15px;
+    }
+    
+    .form-input, .form-textarea, .form-select {
+        padding: 10px 12px;
+        font-size: 16px;
+    }
+    
+    /* Smaller widgets */
+    .widget {
+        padding: 15px;
+    }
+    
+    .widget h3 {
+        font-size: 1.2rem;
+    }
+    
+    /* Minimal avatar */
+    .avatar-preview {
+        width: 100px;
+        height: 100px;
+    }
+    
+    /* Compact notifications */
+    .notifications-dropdown, .floating-notifications {
+        width: calc(100vw - 20px);
+        right: 10px;
+        left: 10px;
+    }
+    
+    .notification-item {
+        padding: 10px 12px;
+    }
+    
+    /* Footer compact */
+    .cyber-footer {
+        padding: 25px 10px;
+    }
+    
+    .footer-content {
+        gap: 20px;
+    }
+    
+    .social-links a {
+        font-size: 1.5rem;
+    }
+}
+
+/* Large mobile/tablet devices (768px - 1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .content-wrapper {
+        grid-template-columns: 300px 1fr;
+        gap: 25px;
+    }
+    
+    .header-content {
+        padding: 0 20px;
+    }
+    
+    .main-nav {
+        display: flex;
+    }
+    
+    .user-actions {
+        flex-wrap: nowrap;
+    }
+    
+    .btn {
+        min-width: auto;
+    }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+    /* Larger touch targets */
+    .btn {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    .nav-link {
+        min-height: 44px;
+        padding: 12px 15px;
+    }
+    
+    .vote-btn {
+        min-height: 48px;
+        min-width: 48px;
+    }
+    
+    /* Reduce hover effects on touch devices */
+    .post-card:hover,
+    .category-card:hover,
+    .btn:hover {
+        transform: none;
+    }
+    
+    /* Maintain pressed states for feedback */
+    .btn:active,
+    .vote-btn:active,
+    .nav-link:active {
+        transform: scale(0.95);
+        transition: transform 0.1s ease;
+    }
+}
+
+/* Orientation-specific fixes */
+@media (orientation: landscape) and (max-height: 500px) {
+    .cyber-header {
+        padding: 5px 0;
+    }
+    
+    .header-content {
+        flex-direction: row;
+        gap: 10px;
+        align-items: center;
+    }
+    
+    .site-branding {
+        flex-direction: row;
+        gap: 15px;
+        text-align: left;
+    }
+    
+    .user-actions {
+        flex-direction: row;
+        gap: 8px;
+    }
+    
+    .main-nav {
+        display: none;
+    }
+}
+
+/* High DPI/Retina displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    /* Sharper icons and graphics */
+    .logo h1 i,
+    .nav-link i,
+    .btn i {
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+}
+
+/* Dark mode mobile adjustments */
+@media (prefers-color-scheme: dark) and (max-width: 768px) {
+    .cyber-header {
+        background: rgba(10, 10, 26, 0.95);
+    }
+    
+    .dropdown-menu {
+        background: #1a1a2e;
+        border: 1px solid #2a2a4a;
+    }
+}
+
+/* Print styles for mobile */
+@media print and (max-width: 768px) {
+    .cyber-header,
+    .user-actions,
+    .post-vote,
+    .sidebar {
+        display: none;
+    }
+    
+    .post-card {
+        box-shadow: none;
+        border: 1px solid #ccc;
+    }
+}
