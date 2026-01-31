@@ -1,0 +1,296 @@
+<?php
+require_once 'config.php';
+
+// Get posts with pagination
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$category = isset($_GET['category']) ? sanitize_input($_GET['category']) : '';
+$limit = 10;
+$offset = ($page - 1) * $limit;
+
+// Build query based on filters
+$where_clause = "WHERE p.status = 'active'";
+$params = [];
+
+if ($category && $category !== 'all') {
+    $where_clause .= " AND p.category = ?";
+    $params[] = $category;
+}
+
+$query = "SELECT p.*, u.username, u.exp, 
+          (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id AND c.status = 'active') as comment_count
+          FROM posts p 
+          JOIN users u ON p.user_id = u.id 
+          $where_clause 
+          ORDER BY p.score DESC, p.created_at DESC 
+          LIMIT ? OFFSET ?";
+
+$stmt = $pdo->prepare($query);
+$stmt->execute(array_merge($params, [$limit, $offset]));
+$posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Get total posts count for pagination
+$count_query = "SELECT COUNT(*) FROM posts p $where_clause";
+$count_stmt = $pdo->prepare($count_query);
+$count_stmt->execute($params);
+$total_posts = $count_stmt->fetchColumn();
+$total_pages = ceil($total_posts / $limit);
+
+// Get categories
+$stmt = $pdo->query("SELECT * FROM categories ORDER BY name");
+$categories = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Get top users
+$stmt = $pdo->query("SELECT id, username, exp FROM users ORDER BY exp DESC LIMIT 5");
+$top_users = $stmt->fetchAll(PDO::FETCH_ASSOC);
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?php echo SITE_NAME; ?></title>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="cyber-header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <h1><i class="fas fa-robot"></i> FUROM</h1>
+                    <span class="tagline">Futuristic Community Platform</span>
+                </div>
+                
+                <nav class="main-nav">
+                    <a href="index.php" class="nav-link <?php echo !$category ? 'active' : ''; ?>">Home</a>
+                    <?php foreach($categories as $cat): ?>
+                        <a href="?category=<?php echo $cat['name']; ?>" 
+                           class="nav-link <?php echo $category === $cat['name'] ? 'active' : ''; ?>">
+                            <i class="fas fa-<?php echo $cat['icon']; ?>"></i>
+                            <?php echo ucfirst($cat['name']); ?>
+                        </a>
+                    <?php endforeach; ?>
+                </nav>
+                
+                <div class="user-actions">
+                    <?php if(is_logged_in()): ?>
+                        <?php $current_user = get_user_data(get_current_user_id()); ?>
+                        <div class="user-dropdown">
+                            <button class="user-btn">
+                                <img src="<?php echo $current_user['avatar'] ?: 'assets/images/default-avatar.png'; ?>" 
+                                     alt="Avatar" class="avatar-small">
+                                <span class="username"><?php echo $current_user['username']; ?></span>
+                                <span class="exp-badge"><?php echo format_number($current_user['exp']); ?> EXP</span>
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                            <div class="dropdown-menu">
+                                <a href="profile.php"><i class="fas fa-user"></i> Profile</a>
+                                <a href="create-post.php"><i class="fas fa-plus"></i> Create Post</a>
+                                <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <a href="login.php" class="btn btn-outline">Login</a>
+                        <a href="register.php" class="btn btn-primary">Register</a>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-container">
+        <div class="container">
+            <div class="content-wrapper">
+                <!-- Sidebar -->
+                <aside class="sidebar">
+                    <div class="widget">
+                        <h3><i class="fas fa-fire"></i> Trending Now</h3>
+                        <div class="trending-list">
+                            <?php 
+                            $trending_stmt = $pdo->query("SELECT * FROM posts WHERE status = 'active' ORDER BY score DESC LIMIT 5");
+                            $trending_posts = $trending_stmt->fetchAll(PDO::FETCH_ASSOC);
+                            foreach($trending_posts as $tpost): ?>
+                                <div class="trending-item">
+                                    <div class="trending-score"><?php echo $tpost['score']; ?></div>
+                                    <div class="trending-content">
+                                        <a href="post.php?id=<?php echo $tpost['id']; ?>"><?php echo htmlspecialchars(substr($tpost['title'], 0, 60)); ?>...</a>
+                                        <small><?php echo time_elapsed_string($tpost['created_at']); ?></small>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    
+                    <div class="widget">
+                        <h3><i class="fas fa-trophy"></i> Top Contributors</h3>
+                        <div class="leaderboard">
+                            <?php foreach($top_users as $index => $user): ?>
+                                <div class="leaderboard-item">
+                                    <span class="rank">#<?php echo $index + 1; ?></span>
+                                    <span class="user-info">
+                                        <strong><?php echo htmlspecialchars($user['username']); ?></strong>
+                                        <small><?php echo format_number($user['exp']); ?> EXP</small>
+                                    </span>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Main Feed -->
+                <section class="main-feed">
+                    <div class="feed-header">
+                        <h2>
+                            <?php if($category && $category !== 'all'): ?>
+                                <i class="fas fa-<?php echo array_column($categories, 'icon', 'name')[$category] ?? 'folder'; ?>"></i>
+                                <?php echo ucfirst($category); ?> Posts
+                            <?php else: ?>
+                                <i class="fas fa-globe"></i> Latest Discussions
+                            <?php endif; ?>
+                        </h2>
+                        
+                        <?php if(is_logged_in()): ?>
+                            <a href="create-post.php" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Create Post
+                            </a>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- Posts List -->
+                    <div class="posts-container">
+                        <?php if(empty($posts)): ?>
+                            <div class="empty-state">
+                                <i class="fas fa-inbox fa-3x"></i>
+                                <h3>No posts found</h3>
+                                <p><?php echo $category ? 'No posts in this category yet.' : 'Be the first to start a discussion!'; ?></p>
+                                <?php if(is_logged_in()): ?>
+                                    <a href="create-post.php" class="btn btn-primary">Create First Post</a>
+                                <?php endif; ?>
+                            </div>
+                        <?php else: ?>
+                            <?php foreach($posts as $post): ?>
+                                <article class="post-card" data-post-id="<?php echo $post['id']; ?>">
+                                    <div class="post-vote">
+                                        <button class="vote-btn upvote" data-post-id="<?php echo $post['id']; ?>">
+                                            <i class="fas fa-arrow-up"></i>
+                                        </button>
+                                        <span class="vote-count"><?php echo $post['score']; ?></span>
+                                        <button class="vote-btn downvote" data-post-id="<?php echo $post['id']; ?>">
+                                            <i class="fas fa-arrow-down"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="post-content">
+                                        <div class="post-header">
+                                            <div class="post-meta">
+                                                <span class="category-badge" style="background: <?php echo array_column($categories, 'color', 'name')[$post['category']] ?? '#007bff'; ?>">
+                                                    <?php echo ucfirst($post['category']); ?>
+                                                </span>
+                                                <span class="post-author">
+                                                    <img src="<?php echo get_user_data($post['user_id'])['avatar'] ?: 'assets/images/default-avatar.png'; ?>" 
+                                                         alt="Avatar" class="avatar-xs">
+                                                    u/<?php echo htmlspecialchars($post['username']); ?>
+                                                </span>
+                                                <span class="user-level"><?php echo get_user_level($post['exp']); ?></span>
+                                                <span class="post-time"><?php echo time_elapsed_string($post['created_at']); ?></span>
+                                            </div>
+                                        </div>
+                                        
+                                        <h3 class="post-title">
+                                            <a href="post.php?id=<?php echo $post['id']; ?>">
+                                                <?php echo htmlspecialchars($post['title']); ?>
+                                            </a>
+                                        </h3>
+                                        
+                                        <div class="post-excerpt">
+                                            <?php echo htmlspecialchars(substr($post['content'], 0, 200)); ?>...
+                                        </div>
+                                        
+                                        <div class="post-footer">
+                                            <a href="post.php?id=<?php echo $post['id']; ?>#comments" class="comment-link">
+                                                <i class="fas fa-comment"></i>
+                                                <?php echo $post['comment_count']; ?> comments
+                                            </a>
+                                            <div class="post-actions">
+                                                <button class="action-btn share-btn" data-url="post.php?id=<?php echo $post['id']; ?>">
+                                                    <i class="fas fa-share"></i> Share
+                                                </button>
+                                                <button class="action-btn save-btn">
+                                                    <i class="fas fa-bookmark"></i> Save
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </article>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- Pagination -->
+                    <?php if($total_pages > 1): ?>
+                        <div class="pagination">
+                            <?php if($page > 1): ?>
+                                <a href="?page=<?php echo $page - 1; ?><?php echo $category ? '&category=' . $category : ''; ?>" class="page-link">
+                                    <i class="fas fa-chevron-left"></i> Previous
+                                </a>
+                            <?php endif; ?>
+                            
+                            <div class="page-numbers">
+                                <?php for($i = max(1, $page - 2); $i <= min($total_pages, $page + 2); $i++): ?>
+                                    <a href="?page=<?php echo $i; ?><?php echo $category ? '&category=' . $category : ''; ?>" 
+                                       class="page-number <?php echo $i == $page ? 'active' : ''; ?>">
+                                        <?php echo $i; ?>
+                                    </a>
+                                <?php endfor; ?>
+                            </div>
+                            
+                            <?php if($page < $total_pages): ?>
+                                <a href="?page=<?php echo $page + 1; ?><?php echo $category ? '&category=' . $category : ''; ?>" class="page-link">
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </a>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="cyber-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h3><i class="fas fa-robot"></i> FUROM</h3>
+                    <p>The next-generation community platform built for the future.</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Quick Links</h4>
+                    <ul>
+                        <li><a href="about.php">About</a></li>
+                        <li><a href="rules.php">Community Rules</a></li>
+                        <li><a href="privacy.php">Privacy Policy</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Connect</h4>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-discord"></i></a>
+                        <a href="#"><i class="fab fa-github"></i></a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; <?php echo date('Y'); ?> Furom. All rights reserved. | Made with <i class="fas fa-heart"></i> for the community</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="assets/js/main.js"></script>
+</body>
+</html>
