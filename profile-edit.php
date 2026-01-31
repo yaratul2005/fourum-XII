@@ -238,11 +238,15 @@ try {
             background: var(--card-bg);
             border-radius: 15px;
             border: 1px solid var(--border-color);
+            position: relative;
+            z-index: 1;
         }
         
         .avatar-preview-container {
             position: relative;
             margin-bottom: 1rem;
+            cursor: pointer;
+            display: inline-block;
         }
         
         .avatar-preview {
@@ -253,6 +257,8 @@ try {
             border: 3px solid var(--primary);
             cursor: pointer;
             transition: all 0.3s ease;
+            position: relative;
+            z-index: 2;
         }
         
         .avatar-preview:hover {
@@ -276,10 +282,22 @@ try {
             color: white;
             font-size: 0.9rem;
             text-align: center;
+            z-index: 3;
+            pointer-events: none;
         }
         
         .avatar-preview-container:hover .avatar-overlay {
             opacity: 1;
+        }
+        
+        .avatar-overlay i {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 1.5rem;
+        }
+        
+        #avatarInput {
+            display: none !important;
         }
         
         .form-section {
@@ -312,6 +330,11 @@ try {
             .profile-edit-container {
                 padding: 0 0.5rem;
             }
+            
+            .avatar-preview {
+                width: 120px;
+                height: 120px;
+            }
         }
         
         .upload-feedback {
@@ -319,6 +342,8 @@ try {
             padding: 10px;
             border-radius: 5px;
             font-size: 0.9rem;
+            text-align: center;
+            width: 100%;
         }
         
         .upload-success {
@@ -378,12 +403,31 @@ try {
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        
+        /* Debug styles for troubleshooting */
+        .debug-info {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(255, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 10000;
+            display: none;
+        }
     </style>
 </head>
 <body>
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
+    </div>
+    
+    <!-- Debug Info (hidden by default) -->
+    <div class="debug-info" id="debugInfo">
+        Debug: Click events not working
     </div>
     
     <?php include 'includes/header.php'; ?>
@@ -407,18 +451,18 @@ try {
                     <div class="form-section">
                         <h2 class="section-title"><i class="fas fa-camera"></i> Profile Picture</h2>
                         <div class="avatar-section">
-                            <div class="avatar-preview-container">
+                            <div class="avatar-preview-container" id="avatarContainer">
                                 <img src="<?php echo !empty($user_data['avatar']) ? htmlspecialchars($user_data['avatar']) : 'assets/images/default-avatar.png'; ?>" 
                                      alt="Profile Picture" class="avatar-preview" id="avatarPreview">
-                                <div class="avatar-overlay">
+                                <div class="avatar-overlay" id="avatarOverlay">
                                     <div>
-                                        <i class="fas fa-camera"></i><br>
-                                        Click to change
+                                        <i class="fas fa-camera"></i>
+                                        <span>Click to change</span>
                                     </div>
                                 </div>
                             </div>
-                            <input type="file" id="avatarInput" name="avatar" accept="image/*" style="display: none;">
-                            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 10px;">
+                            <input type="file" id="avatarInput" name="avatar" accept="image/*">
+                            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 10px; text-align: center;">
                                 <i class="fas fa-info-circle"></i> JPG, PNG, or GIF files only. Max 2MB.
                             </p>
                             <div id="uploadFeedback"></div>
@@ -535,6 +579,19 @@ try {
     <?php include 'includes/footer.php'; ?>
     
     <script>
+        // Debug function to show event binding status
+        function debugLog(message) {
+            console.log('[Profile Edit Debug] ' + message);
+            const debugInfo = document.getElementById('debugInfo');
+            if (debugInfo) {
+                debugInfo.innerHTML = message;
+                debugInfo.style.display = 'block';
+                setTimeout(() => {
+                    debugInfo.style.display = 'none';
+                }, 3000);
+            }
+        }
+        
         // Show loading overlay
         function showLoading() {
             document.getElementById('loadingOverlay').classList.add('active');
@@ -545,43 +602,91 @@ try {
             document.getElementById('loadingOverlay').classList.remove('active');
         }
         
-        // Avatar upload handling
-        document.getElementById('avatarPreview').addEventListener('click', function() {
-            document.getElementById('avatarInput').click();
-        });
-
-        document.getElementById('avatarInput').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const feedback = document.getElementById('uploadFeedback');
+        // Avatar upload handling with improved event binding
+        document.addEventListener('DOMContentLoaded', function() {
+            debugLog('DOM loaded, initializing avatar events');
             
-            if (file) {
-                // Validate file type
-                const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-                if (!allowedTypes.includes(file.type)) {
-                    feedback.innerHTML = '<div class="upload-feedback upload-error"><i class="fas fa-exclamation-circle"></i> Invalid file type. Please select a JPG, PNG, or GIF image.</div>';
-                    return;
-                }
-                
-                // Validate file size (2MB)
-                if (file.size > 2 * 1024 * 1024) {
-                    feedback.innerHTML = '<div class="upload-feedback upload-error"><i class="fas fa-exclamation-circle"></i> File too large. Maximum size is 2MB.</div>';
-                    return;
-                }
-                
-                // Preview image
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    document.getElementById('avatarPreview').src = e.target.result;
-                    feedback.innerHTML = '<div class="upload-feedback upload-success"><i class="fas fa-check-circle"></i> Image selected. Click "Save Changes" to upload.</div>';
-                };
-                reader.readAsDataURL(file);
+            const avatarPreview = document.getElementById('avatarPreview');
+            const avatarInput = document.getElementById('avatarInput');
+            const avatarContainer = document.getElementById('avatarContainer');
+            const uploadFeedback = document.getElementById('uploadFeedback');
+            
+            // Check if elements exist
+            if (!avatarPreview || !avatarInput || !avatarContainer) {
+                debugLog('ERROR: Avatar elements not found!');
+                return;
             }
+            
+            // Method 1: Click on avatar image
+            avatarPreview.addEventListener('click', function(e) {
+                e.preventDefault();
+                debugLog('Avatar image clicked');
+                avatarInput.click();
+            });
+            
+            // Method 2: Click on container (fallback)
+            avatarContainer.addEventListener('click', function(e) {
+                // Only trigger if not clicking on the image itself
+                if (e.target === avatarContainer || e.target.classList.contains('avatar-overlay')) {
+                    e.preventDefault();
+                    debugLog('Avatar container clicked');
+                    avatarInput.click();
+                }
+            });
+            
+            // Handle file selection
+            avatarInput.addEventListener('change', function(e) {
+                debugLog('File input changed');
+                const file = e.target.files[0];
+                
+                if (file) {
+                    debugLog('File selected: ' + file.name);
+                    
+                    // Validate file type
+                    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+                    if (!allowedTypes.includes(file.type)) {
+                        const errorMsg = 'Invalid file type. Please select a JPG, PNG, or GIF image.';
+                        uploadFeedback.innerHTML = '<div class="upload-feedback upload-error"><i class="fas fa-exclamation-circle"></i> ' + errorMsg + '</div>';
+                        debugLog('ERROR: ' + errorMsg);
+                        return;
+                    }
+                    
+                    // Validate file size (2MB)
+                    if (file.size > 2 * 1024 * 1024) {
+                        const errorMsg = 'File too large. Maximum size is 2MB.';
+                        uploadFeedback.innerHTML = '<div class="upload-feedback upload-error"><i class="fas fa-exclamation-circle"></i> ' + errorMsg + '</div>';
+                        debugLog('ERROR: ' + errorMsg);
+                        return;
+                    }
+                    
+                    // Preview image
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        avatarPreview.src = e.target.result;
+                        const successMsg = 'Image selected. Click "Save Changes" to upload.';
+                        uploadFeedback.innerHTML = '<div class="upload-feedback upload-success"><i class="fas fa-check-circle"></i> ' + successMsg + '</div>';
+                        debugLog('SUCCESS: ' + successMsg);
+                    };
+                    reader.onerror = function(e) {
+                        const errorMsg = 'Failed to read image file.';
+                        uploadFeedback.innerHTML = '<div class="upload-feedback upload-error"><i class="fas fa-exclamation-circle"></i> ' + errorMsg + '</div>';
+                        debugLog('ERROR: ' + errorMsg);
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    debugLog('No file selected');
+                }
+            });
+            
+            debugLog('Avatar events initialized successfully');
         });
 
         // Character counters
         function updateCharacterCount(textareaId, counterId, maxLength) {
             const textarea = document.getElementById(textareaId);
             const counter = document.getElementById(counterId);
+            
+            if (!textarea || !counter) return;
             
             function updateCount() {
                 const currentLength = textarea.value.length;
@@ -594,8 +699,10 @@ try {
         }
 
         // Initialize character counters
-        updateCharacterCount('bio', 'bioCount', 500);
-        updateCharacterCount('signature', 'signatureCount', 300);
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCharacterCount('bio', 'bioCount', 500);
+            updateCharacterCount('signature', 'signatureCount', 300);
+        });
 
         // Form validation and loading
         document.getElementById('profileForm').addEventListener('submit', function(e) {
