@@ -37,7 +37,7 @@ Options -Indexes
 
 # Error documents
 ErrorDocument 403 /error.php?code=403
-ErrorDocument 404 /error.php?code=404
+ErrorDocument 404 /404.php
 ErrorDocument 500 /error.php?code=500
 
 # Compression

@@ -116,9 +116,6 @@ $total_exp_gained = $stmt->fetchColumn() ?: 0;
                     </div>
                     
                     <div style="text-align: center; min-width: 200px;">
-                        <button class="btn btn-outline" onclick="showEditModal()">
-                            <i class="fas fa-edit"></i> Edit Profile
-                        </button>
                         <div style="margin-top: 1rem; padding: 1rem; background: rgba(0, 0, 0, 0.2); border-radius: 10px;">
                             <h4 style="color: var(--primary); margin-bottom: 0.5rem;">Achievements</h4>
                             <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">

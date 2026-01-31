@@ -55,6 +55,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 }
+
+// Check if Google auth is enabled
+$google_enabled = false;
+try {
+    $stmt = $pdo->query("SELECT setting_value FROM settings WHERE setting_key = 'google_enabled'");
+    $google_enabled = $stmt->fetchColumn() == '1';
+} catch (Exception $e) {
+    // Google auth not configured
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -154,3 +164,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <script src="assets/js/main.js"></script>
 </body>
 </html>
+```
+
+```
