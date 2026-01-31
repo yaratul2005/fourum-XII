@@ -1,38 +1,28 @@
 <?php
-// Enable output buffering to prevent header issues
+// Start output buffering first
 ob_start();
 
-// Database Configuration - UPDATE THESE VALUES WITH YOUR CPANEL CREDENTIALS
+// Database configuration
 define('DB_HOST', 'localhost');
-define('DB_USER', 'greatxyz_admin'); // Replace with your cPanel username + _admin
-define('DB_PASS', 'c(sYbk1;hlCwRQo!'); // Replace with your actual database password
-define('DB_NAME', 'greatxyz_admin'); // Replace with your actual database name
+define('DB_NAME', 'greatxyz_furom');
+define('DB_USER', 'greatxyz_furom');
+define('DB_PASS', 'Vv123456@');
 
-// Site Configuration
+// Site configuration
+define('SITE_NAME', 'Furom');
 define('SITE_URL', 'https://great10.xyz');
-define('SITE_NAME', 'Furom - Futuristic Forum');
 define('ADMIN_EMAIL', 'admin@great10.xyz');
 
-// Security Settings
-define('SECRET_KEY', 'furom_secure_key_' . date('Ymd')); // More secure secret key
+// Security settings
 define('SESSION_TIMEOUT', 3600); // 1 hour
+define('COOKIE_DOMAIN', '.great10.xyz');
 
-// Experience Points Configuration
+// Experience point values
 define('EXP_POST', 10);
 define('EXP_COMMENT', 5);
 define('EXP_UPVOTE', 2);
 define('EXP_DOWNVOTE', -1);
-
-// Email Configuration
-define('SMTP_HOST', 'mail.great10.xyz');
-define('SMTP_PORT', 587);
-define('SMTP_USERNAME', 'noreply@great10.xyz');
-define('SMTP_PASSWORD', 'your_email_password');
-
-// Initialize session with error prevention
-if (session_status() == PHP_SESSION_NONE) {
-    session_start();
-}
+define('EXP_CATEGORY_CREATE', 25);
 
 // Database connection with error handling
 try {
@@ -47,10 +37,17 @@ try {
         ]
     );
 } catch (PDOException $e) {
-    // Log error instead of displaying it publicly
     error_log("Database connection failed: " . $e->getMessage());
-    die("Database connection error. Please check configuration.");
+    die("Database connection failed. Please try again later.");
 }
+
+// Start session only if not already started
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Set timezone
+date_default_timezone_set('UTC');
 
 // Flush output buffer
 ob_end_flush();

@@ -1,14 +1,11 @@
 <?php
-// Include notifications system
-require_once 'notifications.php';
+require_once 'cache-manager.php';
 
-$unread_count = 0;
-$user_notifications = [];
-
-if (is_logged_in()) {
-    $current_user_id = get_current_user_id();
-    $unread_count = get_notification_count($current_user_id);
-    $user_notifications = get_unread_notifications($current_user_id, 5);
+// Set cache headers for static pages
+if (!defined('NO_CACHE')) {
+    CacheManager::setBrowserCache(3600, true); // Cache for 1 hour
+} else {
+    CacheManager::setNoCache();
 }
 ?>
 
@@ -77,6 +74,67 @@ if (is_logged_in()) {
         </div>
     </div>
 </header>
+
+<!-- Global Loading Overlay -->
+<div id="global-loading" class="loading-state" style="display: none;">
+    <div class="loading-spinner"></div>
+    <div class="loading-message">Loading Furom...</div>
+</div>
+
+<script>
+// Global loading state management
+window.furom = window.furom || {};
+furom.loading = {
+    show: function(message = 'Loading...') {
+        const loader = document.getElementById('global-loading');
+        if (loader) {
+            loader.querySelector('.loading-message').textContent = message;
+            loader.style.display = 'flex';
+        }
+    },
+    
+    hide: function() {
+        const loader = document.getElementById('global-loading');
+        if (loader) {
+            loader.style.display = 'none';
+        }
+    }
+};
+
+// Show loading on navigation
+document.addEventListener('DOMContentLoaded', function() {
+    // Add loading to all internal links
+    document.querySelectorAll('a[href^="/"], a[href^="./"], a:not([href^="http"])').forEach(link => {
+        link.addEventListener('click', function() {
+            if (!this.hasAttribute('data-no-loading')) {
+                furom.loading.show();
+            }
+        });
+    });
+    
+    // Hide loading when page loads
+    window.addEventListener('load', function() {
+        furom.loading.hide();
+    });
+});
+
+// Service Worker registration for advanced caching
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw.js')
+            .then(function(registration) {
+                console.log('ServiceWorker registered with scope:', registration.scope);
+            })
+            .catch(function(error) {
+                console.log('ServiceWorker registration failed:', error);
+            });
+    });
+}
+</script>
+
+<style>
+<?php echo LoadingManager::getLoadingCSS(); ?>
+</style>
 
 <!-- Floating Notification Container -->
 <div id="floatingNotifications" class="floating-notifications"></div>

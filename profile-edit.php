@@ -219,6 +219,10 @@ ob_end_flush();
         .profile-header {
             text-align: center;
             margin-bottom: 2rem;
+            padding: 2rem;
+            background: var(--card-bg);
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
         }
         
         .avatar-section {
@@ -226,6 +230,10 @@ ob_end_flush();
             flex-direction: column;
             align-items: center;
             margin-bottom: 2rem;
+            padding: 2rem;
+            background: var(--card-bg);
+            border-radius: 15px;
+            border: 1px solid var(--border-color);
         }
         
         .avatar-preview-container {
@@ -283,6 +291,7 @@ ob_end_flush();
             padding-bottom: 1rem;
             border-bottom: 1px solid var(--border-color);
             color: var(--primary);
+            font-family: 'Orbitron', monospace;
         }
         
         .form-row {
@@ -327,8 +336,48 @@ ob_end_flush();
             color: var(--danger);
         }
     </style>
+    
+    /* Loading spinner styles */
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+    
+    .loading-overlay.active {
+        opacity: 1;
+        visibility: visible;
+    }
+    
+    .spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(0, 245, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: var(--primary);
+        animation: spin 1s ease-in-out infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
 </head>
 <body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+    </div>
     <?php include 'includes/header.php'; ?>
     
     <main class="main-container">
@@ -478,9 +527,24 @@ ob_end_flush();
     <?php include 'includes/footer.php'; ?>
     
     <script>
+        // Show loading overlay
+        function showLoading() {
+            document.getElementById('loadingOverlay').classList.add('active');
+        }
+        
+        // Hide loading overlay
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.remove('active');
+        }
+        
         // Avatar upload handling
         document.getElementById('avatarPreview').addEventListener('click', function() {
             document.getElementById('avatarInput').click();
+        });
+        
+        // Hide loading on page load
+        window.addEventListener('load', function() {
+            hideLoading();
         });
 
         document.getElementById('avatarInput').addEventListener('change', function(e) {
@@ -530,8 +594,10 @@ ob_end_flush();
         updateCharacterCount('bio', 'bioCount', 500);
         updateCharacterCount('signature', 'signatureCount', 300);
 
-        // Form validation
+        // Form validation and loading
         document.getElementById('profileForm').addEventListener('submit', function(e) {
+            showLoading();
+            
             const username = document.getElementById('username').value;
             const bio = document.getElementById('bio').value;
             const location = document.getElementById('location').value;
@@ -540,6 +606,7 @@ ob_end_flush();
             // Username validation
             if (username.length < 3 || username.length > 30) {
                 e.preventDefault();
+                hideLoading();
                 alert('Username must be between 3 and 30 characters');
                 return false;
             }
@@ -571,12 +638,15 @@ ob_end_flush();
         });
 
         document.getElementById('passwordForm').addEventListener('submit', function(e) {
+            showLoading();
+            
             const currentPassword = document.getElementById('current_password').value;
             const newPassword = document.getElementById('new_password').value;
             const confirmPassword = document.getElementById('confirm_password').value;
             
             if (newPassword.length < 8) {
                 e.preventDefault();
+                hideLoading();
                 alert('New password must be at least 8 characters long');
                 return false;
             }
