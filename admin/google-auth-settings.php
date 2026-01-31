@@ -1,5 +1,5 @@
 <?php
-// Google OAuth Configuration for Admin Panel - Enhanced Version
+// Google OAuth Configuration for Admin Panel - Enhanced Version with Better Redirect URI Handling
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -33,6 +33,7 @@ try {
     $message = '';
     $message_type = '';
     $initialization_needed = false;
+    $debug_info = []; // For troubleshooting
     
     // Check if settings table exists
     try {
@@ -47,6 +48,12 @@ try {
         $message_type = 'error';
         $initialization_needed = true;
     }
+    
+    // Debug server information
+    $debug_info['SITE_URL'] = defined('SITE_URL') ? SITE_URL : 'NOT DEFINED';
+    $debug_info['HTTP_HOST'] = $_SERVER['HTTP_HOST'] ?? 'NOT SET';
+    $debug_info['SERVER_NAME'] = $_SERVER['SERVER_NAME'] ?? 'NOT SET';
+    $debug_info['HTTPS'] = $_SERVER['HTTPS'] ?? 'NOT SET';
     
     // Handle Google OAuth configuration save
     if (isset($_POST['save_google_auth']) && !$initialization_needed) {
@@ -68,6 +75,11 @@ try {
                 throw new Exception('Please provide both Client ID and Client Secret when enabling Google Login');
             }
             
+            // Validate redirect URI
+            if (empty($google_config['redirect_uri'])) {
+                throw new Exception('Redirect URI is required and could not be generated automatically.');
+            }
+            
             // Save configuration
             if (save_google_config_enhanced($google_config)) {
                 $message = 'Google OAuth configuration saved successfully!';
@@ -87,6 +99,35 @@ try {
     
     // Get current Google configuration
     $current_google = $initialization_needed ? get_default_google_config() : get_google_config_enhanced();
+    
+    // Generate redirect URI with comprehensive fallback
+    $redirect_uri = '';
+    
+    // Method 1: Use stored configuration if available and valid
+    if (!empty($current_google['redirect_uri']) && filter_var($current_google['redirect_uri'], FILTER_VALIDATE_URL)) {
+        $redirect_uri = $current_google['redirect_uri'];
+        $debug_info['uri_source'] = 'Stored configuration';
+    } 
+    // Method 2: Use SITE_URL constant if defined
+    elseif (defined('SITE_URL') && !empty(SITE_URL)) {
+        $redirect_uri = rtrim(SITE_URL, '/') . '/auth/google/callback.php';
+        $debug_info['uri_source'] = 'SITE_URL constant';
+    } 
+    // Method 3: Construct from server variables
+    else {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+        $host = $_SERVER['HTTP_HOST'] ?? $_SERVER['SERVER_NAME'] ?? 'localhost';
+        $redirect_uri = $protocol . $host . '/auth/google/callback.php';
+        $debug_info['uri_source'] = 'Server variables';
+    }
+    
+    // Ensure we always have a redirect URI
+    if (empty($redirect_uri)) {
+        $redirect_uri = 'https://great10.xyz/auth/google/callback.php';
+        $debug_info['uri_source'] = 'Hardcoded fallback';
+    }
+    
+    $debug_info['generated_uri'] = $redirect_uri;
     
 } catch (Exception $e) {
     $fatal_error = $e->getMessage();
@@ -681,8 +722,20 @@ function save_google_config_enhanced($config) {
                         
                         <div class="form-group">
                             <label for="google_redirect_uri">Redirect URI</label>
-                            <input type="text" id="google_redirect_uri" name="google_redirect_uri" value="<?php echo htmlspecialchars($current_google['redirect_uri'] ?? (defined('SITE_URL') ? SITE_URL : 'https://' . $_SERVER['HTTP_HOST']) . '/auth/google/callback.php'); ?>" readonly>
+                            <input type="text" id="google_redirect_uri" name="google_redirect_uri" value="<?php echo htmlspecialchars($redirect_uri); ?>" readonly>
                             <small>This is automatically generated - copy this to your Google Console</small>
+                            <?php if (!empty($debug_info['uri_source'])): ?>
+                                <div class="message info" style="margin-top: 10px; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3);">
+                                    <i class="fas fa-info-circle"></i> 
+                                    Generated using: <?php echo htmlspecialchars($debug_info['uri_source']); ?>
+                                </div>
+                            <?php endif; ?>
+                            <?php if (empty($redirect_uri)): ?>
+                                <div class="message error" style="margin-top: 10px;">
+                                    <i class="fas fa-exclamation-triangle"></i> 
+                                    Critical Error: Unable to generate redirect URI. Please contact administrator.
+                                </div>
+                            <?php endif; ?>
                         </div>
                         
                         <div class="form-group">
