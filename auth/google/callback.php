@@ -106,12 +106,12 @@ try {
     if ($existing_user) {
         // User exists, log them in
         $_SESSION['user_id'] = $existing_user['id'];
+        $_SESSION['username'] = $existing_user['username'];
         $stmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
         $stmt->execute([$existing_user['id']]);
         
-        // Redirect to original destination or home
-        $redirect_url = $_SESSION['login_redirect'] ?? '/';
-        unset($_SESSION['login_redirect']);
+        // Redirect to user profile page
+        $redirect_url = '/profile.php?id=' . $existing_user['id'];
         header("Location: $redirect_url");
         exit();
     } else {
@@ -135,17 +135,19 @@ try {
         
         $user_id = $pdo->lastInsertId();
         $_SESSION['user_id'] = $user_id;
+        $_SESSION['username'] = $username;
         
-        // Redirect to profile setup or home
-        $redirect_url = $_SESSION['login_redirect'] ?? '/';
-        unset($_SESSION['login_redirect']);
+        // Redirect to user profile for new users to complete setup
+        $redirect_url = '/profile.php?id=' . $user_id;
         header("Location: $redirect_url");
         exit();
     }
     
 } catch (Exception $e) {
     error_log("Google OAuth callback error: " . $e->getMessage());
-    // Handle error appropriately
+    // Redirect to login with error
+    header("Location: /login.php?error=google_auth_failed&message=" . urlencode($e->getMessage()));
+    exit();
 }
 
 function get_google_config() {

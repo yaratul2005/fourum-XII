@@ -44,8 +44,8 @@
             <a href="smtp-settings.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'smtp-settings.php' ? 'active' : ''; ?>">
                 <i class="fas fa-envelope"></i> SMTP Settings
             </a>
-            <a href="email-diagnostics.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'email-diagnostics.php' ? 'active' : ''; ?>">
-                <i class="fas fa-flask"></i> Email Diagnostics
+            <a href="email-test-tool.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'email-test-tool.php' ? 'active' : ''; ?>">
+                <i class="fas fa-flask"></i> Email Testing
             </a>
             <a href="google-auth-settings.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'google-auth-settings.php' ? 'active' : ''; ?>">
                 <i class="fab fa-google"></i> Google Auth
@@ -57,26 +57,6 @@
                 <i class="fas fa-database"></i> Backup
             </a>
         </div>
-
-        <!-- Tools & Utilities -->
-        <div class="menu-section">
-            <h3>Tools</h3>
-            <a href="logs.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'logs.php' ? 'active' : ''; ?>">
-                <i class="fas fa-file-alt"></i> System Logs
-            </a>
-            <a href="maintenance.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'maintenance.php' ? 'active' : ''; ?>">
-                <i class="fas fa-tools"></i> Maintenance
-            </a>
-        </div>
-    </div>
-    
-    <div class="sidebar-footer">
-        <a href="../index.php" class="nav-item">
-            <i class="fas fa-arrow-left"></i> Back to Site
-        </a>
-        <a href="../logout.php" class="nav-item">
-            <i class="fas fa-sign-out-alt"></i> Logout
-        </a>
     </div>
 </nav>
 

@@ -1,4 +1,3 @@
-<?php
 // Enhanced Profile Editor with Improved Image Upload and Validation
 // Define NO_CACHE to prevent cache headers on this page
 define('NO_CACHE', true);
@@ -308,6 +307,10 @@ try {
             .form-row {
                 grid-template-columns: 1fr;
             }
+            
+            .profile-edit-container {
+                padding: 0 0.5rem;
+            }
         }
         
         .upload-feedback {
@@ -339,49 +342,49 @@ try {
         .character-limit-exceeded {
             color: var(--danger);
         }
+        
+        /* Loading spinner styles */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .loading-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(0, 245, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
-    
-    /* Loading spinner styles */
-    .loading-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.8);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-        opacity: 0;
-        visibility: hidden;
-        transition: all 0.3s ease;
-    }
-    
-    .loading-overlay.active {
-        opacity: 1;
-        visibility: visible;
-    }
-    
-    .spinner {
-        width: 50px;
-        height: 50px;
-        border: 3px solid rgba(0, 245, 255, 0.3);
-        border-radius: 50%;
-        border-top-color: var(--primary);
-        animation: spin 1s ease-in-out infinite;
-    }
-    
-    @keyframes spin {
-        to { transform: rotate(360deg); }
-    }
-</style>
 </head>
 <body>
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
     </div>
+    
     <?php include 'includes/header.php'; ?>
     
     <main class="main-container">
@@ -545,11 +548,6 @@ try {
         document.getElementById('avatarPreview').addEventListener('click', function() {
             document.getElementById('avatarInput').click();
         });
-        
-        // Hide loading on page load
-        window.addEventListener('load', function() {
-            hideLoading();
-        });
 
         document.getElementById('avatarInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -617,6 +615,7 @@ try {
             
             if (!/^[a-zA-Z0-9_]+$/.test(username)) {
                 e.preventDefault();
+                hideLoading();
                 alert('Username can only contain letters, numbers, and underscores');
                 return false;
             }
@@ -624,18 +623,21 @@ try {
             // Length validations
             if (bio.length > 500) {
                 e.preventDefault();
+                hideLoading();
                 alert('Bio must be 500 characters or less');
                 return false;
             }
             
             if (location.length > 100) {
                 e.preventDefault();
+                hideLoading();
                 alert('Location must be 100 characters or less');
                 return false;
             }
             
             if (signature.length > 300) {
                 e.preventDefault();
+                hideLoading();
                 alert('Signature must be 300 characters or less');
                 return false;
             }
@@ -657,15 +659,22 @@ try {
             
             if (newPassword !== confirmPassword) {
                 e.preventDefault();
+                hideLoading();
                 alert('New passwords do not match');
                 return false;
             }
             
             if (currentPassword === newPassword) {
                 e.preventDefault();
+                hideLoading();
                 alert('New password must be different from current password');
                 return false;
             }
+        });
+        
+        // Hide loading on page load
+        window.addEventListener('load', function() {
+            hideLoading();
         });
     </script>
 </body>
