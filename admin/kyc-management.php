@@ -1,134 +1,95 @@
 <?php
-// Admin KYC Management Panel
 require_once '../config.php';
 require_once '../includes/functions.php';
 
-if (session_status() == PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Check admin access
-if (!is_logged_in()) {
+if (!is_admin()) {
     header('Location: ../login.php');
     exit();
 }
 
-$current_user = get_user_data(get_current_user_id());
-if ($current_user['username'] !== 'admin') {
-    header('Location: ../index.php');
-    exit();
-}
+$action = $_GET['action'] ?? 'list';
+$id = intval($_GET['id'] ?? 0);
 
 $message = '';
 $message_type = '';
 
-// Handle KYC actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
-    try {
-        $kyc_id = (int)$_POST['kyc_id'];
-        $action = $_POST['action'];
-        $admin_notes = trim($_POST['admin_notes'] ?? '');
+// Handle actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['approve_kyc'])) {
+        $rejection_reason = trim($_POST['rejection_reason'] ?? '');
         
-        // Get KYC record
-        $stmt = $pdo->prepare("SELECT * FROM kyc_documents WHERE id = ?");
-        $stmt->execute([$kyc_id]);
-        $kyc_record = $stmt->fetch();
-        
-        if (!$kyc_record) {
-            throw new Exception('KYC record not found.');
+        try {
+            $stmt = $pdo->prepare("UPDATE kyc_submissions SET status = 'approved', rejection_reason = NULL, updated_at = NOW() WHERE id = ?");
+            if ($stmt->execute([$id])) {
+                // Award EXP for verification
+                $stmt = $pdo->prepare("SELECT user_id FROM kyc_submissions WHERE id = ?");
+                $stmt->execute([$id]);
+                $user_id = $stmt->fetchColumn();
+                
+                award_exp($user_id, EXP_KYC_APPROVED, 'KYC verification approved');
+                
+                $message = 'KYC submission approved successfully!';
+                $message_type = 'success';
+            }
+        } catch (Exception $e) {
+            $message = 'Error approving KYC: ' . $e->getMessage();
+            $message_type = 'error';
         }
+    }
+    
+    if (isset($_POST['reject_kyc'])) {
+        $rejection_reason = trim($_POST['rejection_reason'] ?? '');
         
-        $new_status = '';
-        switch ($action) {
-            case 'approve':
-                $new_status = 'approved';
-                // Update user KYC status
-                $stmt = $pdo->prepare("UPDATE users SET kyc_status = 'verified', kyc_verified_at = NOW() WHERE id = ?");
-                $stmt->execute([$kyc_record['user_id']]);
-                // Send notification to user
-                send_user_notification($kyc_record['user_id'], 'KYC Approved', 'Your KYC verification has been approved! You can now create categories.', 'kyc_update', $kyc_id);
-                break;
-                
-            case 'reject':
-                $new_status = 'rejected';
-                // Update user KYC status
-                $stmt = $pdo->prepare("UPDATE users SET kyc_status = 'rejected' WHERE id = ?");
-                $stmt->execute([$kyc_record['user_id']]);
-                // Send notification to user
-                send_user_notification($kyc_record['user_id'], 'KYC Rejected', 'Your KYC verification has been rejected. Please check the notes and resubmit.', 'kyc_update', $kyc_id);
-                break;
-                
-            case 'request_changes':
-                $new_status = 'review_required';
-                // Send notification to user
-                send_user_notification($kyc_record['user_id'], 'KYC Review Required', 'Additional information is needed for your KYC verification. Please check the notes.', 'kyc_update', $kyc_id);
-                break;
-                
-            default:
-                throw new Exception('Invalid action.');
+        if (empty($rejection_reason)) {
+            $message = 'Rejection reason is required';
+            $message_type = 'error';
+        } else {
+            try {
+                $stmt = $pdo->prepare("UPDATE kyc_submissions SET status = 'rejected', rejection_reason = ?, updated_at = NOW() WHERE id = ?");
+                if ($stmt->execute([$rejection_reason, $id])) {
+                    $message = 'KYC submission rejected';
+                    $message_type = 'success';
+                }
+            } catch (Exception $e) {
+                $message = 'Error rejecting KYC: ' . $e->getMessage();
+                $message_type = 'error';
+            }
         }
-        
-        // Update KYC record
-        $stmt = $pdo->prepare("UPDATE kyc_documents SET status = ?, admin_notes = ?, reviewed_at = NOW(), reviewed_by = ? WHERE id = ?");
-        $stmt->execute([$new_status, $admin_notes, $current_user['id'], $kyc_id]);
-        
-        // Log the action
-        log_kyc_action($kyc_id, $action, $current_user['id'], $admin_notes);
-        
-        $message = "KYC verification {$action}d successfully!";
-        $message_type = 'success';
-        
-    } catch (Exception $e) {
-        $message = 'Error: ' . $e->getMessage();
-        $message_type = 'error';
     }
 }
 
-// Get KYC records with filtering
-$status_filter = $_GET['status'] ?? 'all';
-$page = max(1, (int)($_GET['page'] ?? 1));
-$limit = 10;
+// Get KYC submissions
+$page = max(1, intval($_GET['page'] ?? 1));
+$limit = 20;
 $offset = ($page - 1) * $limit;
 
 $where_clause = '';
 $params = [];
 
-if ($status_filter !== 'all') {
-    $where_clause = "WHERE kd.status = ?";
+// Filter by status
+$status_filter = $_GET['status'] ?? '';
+if ($status_filter) {
+    $where_clause = "WHERE status = ?";
     $params[] = $status_filter;
 }
 
-// Get total count
-$stmt = $pdo->prepare("SELECT COUNT(*) as total FROM kyc_documents kd {$where_clause}");
-$stmt->execute($params);
-$total_records = $stmt->fetch()['total'];
-$total_pages = ceil($total_records / $limit);
+$stmt = $pdo->prepare("SELECT k.*, u.username, u.email FROM kyc_submissions k JOIN users u ON k.user_id = u.id {$where_clause} ORDER BY k.created_at DESC LIMIT ? OFFSET ?");
+$stmt->execute(array_merge($params, [$limit, $offset]));
+$submissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Get KYC records
-$stmt = $pdo->prepare("
-    SELECT kd.*, u.username, u.email, u.exp,
-           reviewer.username as reviewer_name
-    FROM kyc_documents kd
-    JOIN users u ON kd.user_id = u.id
-    LEFT JOIN users reviewer ON kd.reviewed_by = reviewer.id
-    {$where_clause}
-    ORDER BY kd.submitted_at DESC
-    LIMIT {$limit} OFFSET {$offset}
-");
-$stmt->execute($params);
-$kyc_records = $stmt->fetchAll();
+// Get total count for pagination
+$count_stmt = $pdo->prepare("SELECT COUNT(*) FROM kyc_submissions k JOIN users u ON k.user_id = u.id {$where_clause}");
+$count_stmt->execute($params);
+$total_submissions = $count_stmt->fetchColumn();
+$total_pages = ceil($total_submissions / $limit);
 
-// Get statistics
-$stats_stmt = $pdo->query("
-    SELECT 
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
-        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
-        SUM(CASE WHEN status = 'review_required' THEN 1 ELSE 0 END) as review_required,
-        COUNT(*) as total
-    FROM kyc_documents
-");
-$stats = $stats_stmt->fetch();
+// Get specific submission if viewing details
+$submission = null;
+if ($id && $action === 'view') {
+    $stmt = $pdo->prepare("SELECT k.*, u.username, u.email, u.avatar FROM kyc_submissions k JOIN users u ON k.user_id = u.id WHERE k.id = ?");
+    $stmt->execute([$id]);
+    $submission = $stmt->fetch(PDO::FETCH_ASSOC);
+}
 ?>
 
 <!DOCTYPE html>
@@ -140,153 +101,85 @@ $stats = $stats_stmt->fetch();
     <link rel="stylesheet" href="../assets/css/admin.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        .stats-grid {
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .status-pending {
+            background: rgba(255, 204, 0, 0.2);
+            border: 1px solid var(--admin-warning);
+            color: var(--admin-warning);
+        }
+        
+        .status-approved {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid var(--admin-success);
+            color: var(--admin-success);
+        }
+        
+        .status-rejected {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--admin-danger);
+            color: var(--admin-danger);
+        }
+        
+        .document-preview {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 8px;
+            border: 1px solid var(--admin-border);
+            margin: 0.5rem 0;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: var(--admin-bg);
+            border-radius: 15px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            border: 1px solid var(--admin-border);
+        }
+        
+        .stats-cards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            gap: 1rem;
+            margin: 1rem 0;
         }
         
         .stat-card {
-            background: var(--card-bg);
+            background: var(--admin-darker);
+            padding: 1.5rem;
             border-radius: 10px;
-            padding: 20px;
             text-align: center;
-            border: 1px solid var(--border-color);
         }
         
         .stat-number {
             font-size: 2rem;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .stat-pending { color: #f59e0b; }
-        .stat-approved { color: #10b981; }
-        .stat-rejected { color: #ef4444; }
-        .stat-review { color: #3b82f6; }
-        .stat-total { color: var(--text-primary); }
-        
-        .filter-bar {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 25px;
-            flex-wrap: wrap;
-        }
-        
-        .filter-btn {
-            padding: 8px 15px;
-            border-radius: 20px;
-            text-decoration: none;
-            font-size: 0.9rem;
-        }
-        
-        .filter-btn.active {
-            background: var(--primary);
-            color: var(--dark-bg);
-        }
-        
-        .kyc-record {
-            background: var(--card-bg);
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            border: 1px solid var(--border-color);
-        }
-        
-        .record-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--border-color);
-        }
-        
-        .user-info {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        
-        .status-badge {
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-        }
-        
-        .status-pending { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
-        .status-approved { background: rgba(16, 185, 129, 0.2); color: #10b981; }
-        .status-rejected { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-        .status-review { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
-        
-        .document-images {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin: 20px 0;
-        }
-        
-        .document-image {
-            text-align: center;
-        }
-        
-        .document-image img {
-            max-width: 100%;
-            max-height: 150px;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-        }
-        
-        .document-label {
-            margin-top: 10px;
-            font-weight: 600;
-            color: var(--text-secondary);
-        }
-        
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border-color);
-        }
-        
-        .btn-small {
-            padding: 8px 15px;
-            font-size: 0.9rem;
-            border-radius: 5px;
-        }
-        
-        .pagination {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin-top: 30px;
-        }
-        
-        .pagination a,
-        .pagination span {
-            padding: 10px 15px;
-            border-radius: 5px;
-            text-decoration: none;
-        }
-        
-        .pagination a {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-        }
-        
-        .pagination a:hover {
-            background: var(--primary);
-            color: var(--dark-bg);
-        }
-        
-        .pagination .current {
-            background: var(--primary);
-            color: var(--dark-bg);
+            font-weight: 700;
+            margin-bottom: 0.5rem;
         }
     </style>
 </head>
@@ -295,233 +188,304 @@ $stats = $stats_stmt->fetch();
         <?php include 'sidebar.php'; ?>
         
         <main class="admin-main">
-            <header class="admin-header">
+            <div class="admin-header">
                 <h1><i class="fas fa-id-card"></i> KYC Management</h1>
-                <p>Review and manage user identity verifications</p>
-            </header>
-            
-            <div class="admin-content">
-                <?php if ($message): ?>
-                    <div class="message <?php echo $message_type; ?>">
-                        <?php echo htmlspecialchars($message); ?>
-                    </div>
-                <?php endif; ?>
-                
-                <!-- Statistics -->
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-number stat-pending"><?php echo $stats['pending']; ?></div>
-                        <div>Pending</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number stat-approved"><?php echo $stats['approved']; ?></div>
-                        <div>Approved</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number stat-rejected"><?php echo $stats['rejected']; ?></div>
-                        <div>Rejected</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number stat-review"><?php echo $stats['review_required']; ?></div>
-                        <div>Review Required</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number stat-total"><?php echo $stats['total']; ?></div>
-                        <div>Total Submissions</div>
-                    </div>
-                </div>
-                
-                <!-- Filter Bar -->
-                <div class="filter-bar">
-                    <a href="?status=all" class="filter-btn <?php echo $status_filter === 'all' ? 'active' : ''; ?>">
-                        All (<?php echo $stats['total']; ?>)
+                <div>
+                    <a href="?status=pending" class="btn btn-warning">
+                        <i class="fas fa-clock"></i> Pending (<?php 
+                            $stmt = $pdo->query("SELECT COUNT(*) FROM kyc_submissions WHERE status = 'pending'");
+                            echo $stmt->fetchColumn();
+                        ?>)
                     </a>
-                    <a href="?status=pending" class="filter-btn <?php echo $status_filter === 'pending' ? 'active' : ''; ?>">
-                        Pending (<?php echo $stats['pending']; ?>)
+                    <a href="?status=approved" class="btn btn-success">
+                        <i class="fas fa-check"></i> Approved
                     </a>
-                    <a href="?status=approved" class="filter-btn <?php echo $status_filter === 'approved' ? 'active' : ''; ?>">
-                        Approved (<?php echo $stats['approved']; ?>)
-                    </a>
-                    <a href="?status=rejected" class="filter-btn <?php echo $status_filter === 'rejected' ? 'active' : ''; ?>">
-                        Rejected (<?php echo $stats['rejected']; ?>)
-                    </a>
-                    <a href="?status=review_required" class="filter-btn <?php echo $status_filter === 'review_required' ? 'active' : ''; ?>">
-                        Review Required (<?php echo $stats['review_required']; ?>)
+                    <a href="?status=rejected" class="btn btn-danger">
+                        <i class="fas fa-times"></i> Rejected
                     </a>
                 </div>
-                
-                <!-- KYC Records -->
-                <?php if (empty($kyc_records)): ?>
-                    <div class="kyc-record" style="text-align: center; padding: 40px;">
-                        <i class="fas fa-inbox fa-3x" style="color: var(--text-secondary); margin-bottom: 20px;"></i>
-                        <h3>No KYC submissions found</h3>
-                        <p>There are no <?php echo $status_filter === 'all' ? '' : $status_filter; ?> KYC submissions to display.</p>
+            </div>
+
+            <?php if ($message): ?>
+                <div class="alert <?php echo $message_type; ?>">
+                    <?php echo htmlspecialchars($message); ?>
+                </div>
+            <?php endif; ?>
+
+            <!-- Stats Overview -->
+            <div class="stats-cards">
+                <div class="stat-card">
+                    <div class="stat-number" style="color: var(--admin-warning);">
+                        <?php 
+                        $stmt = $pdo->query("SELECT COUNT(*) FROM kyc_submissions WHERE status = 'pending'");
+                        echo $stmt->fetchColumn();
+                        ?>
                     </div>
-                <?php else: ?>
-                    <?php foreach ($kyc_records as $record): ?>
-                        <div class="kyc-record">
-                            <div class="record-header">
-                                <div class="user-info">
-                                    <div>
-                                        <h3><?php echo htmlspecialchars($record['username']); ?></h3>
-                                        <p style="color: var(--text-secondary); margin: 5px 0;">
-                                            <?php echo htmlspecialchars($record['email']); ?> • 
-                                            EXP: <?php echo number_format($record['exp']); ?>
-                                        </p>
-                                        <p style="color: var(--text-secondary); font-size: 0.9rem;">
-                                            Submitted: <?php echo date('M j, Y g:i A', strtotime($record['submitted_at'])); ?>
-                                            <?php if ($record['reviewed_at']): ?>
-                                                • Reviewed: <?php echo date('M j, Y g:i A', strtotime($record['reviewed_at'])); ?>
-                                            <?php endif; ?>
-                                        </p>
-                                    </div>
-                                </div>
+                    <p>Pending Review</p>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: var(--admin-success);">
+                        <?php 
+                        $stmt = $pdo->query("SELECT COUNT(*) FROM kyc_submissions WHERE status = 'approved'");
+                        echo $stmt->fetchColumn();
+                        ?>
+                    </div>
+                    <p>Approved</p>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" style="color: var(--admin-danger);">
+                        <?php 
+                        $stmt = $pdo->query("SELECT COUNT(*) FROM kyc_submissions WHERE status = 'rejected'");
+                        echo $stmt->fetchColumn();
+                        ?>
+                    </div>
+                    <p>Rejected</p>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">
+                        <?php 
+                        $stmt = $pdo->query("SELECT COUNT(*) FROM kyc_submissions");
+                        echo $stmt->fetchColumn();
+                        ?>
+                    </div>
+                    <p>Total Submissions</p>
+                </div>
+            </div>
+
+            <?php if ($action === 'view' && $submission): ?>
+                <!-- Submission Detail View -->
+                <div class="admin-content">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-user"></i> KYC Submission Details</h2>
+                            <div>
+                                <span class="status-badge status-<?php echo $submission['status']; ?>">
+                                    <?php echo ucfirst($submission['status']); ?>
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="card-body">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
                                 <div>
-                                    <span class="status-badge status-<?php echo str_replace('_', '-', $record['status']); ?>">
-                                        <?php echo ucfirst(str_replace('_', ' ', $record['status'])); ?>
-                                    </span>
-                                    <?php if ($record['reviewer_name']): ?>
-                                        <div style="margin-top: 10px; font-size: 0.9rem; color: var(--text-secondary);">
-                                            Reviewed by: <?php echo htmlspecialchars($record['reviewer_name']); ?>
+                                    <h3><i class="fas fa-user"></i> User Information</h3>
+                                    <p><strong>Username:</strong> <?php echo htmlspecialchars($submission['username']); ?></p>
+                                    <p><strong>Email:</strong> <?php echo htmlspecialchars($submission['email']); ?></p>
+                                    <p><strong>Submitted:</strong> <?php echo date('M j, Y g:i A', strtotime($submission['created_at'])); ?></p>
+                                    <?php if ($submission['updated_at']): ?>
+                                        <p><strong>Last Updated:</strong> <?php echo date('M j, Y g:i A', strtotime($submission['updated_at'])); ?></p>
+                                    <?php endif; ?>
+                                </div>
+                                
+                                <div>
+                                    <h3><i class="fas fa-file-alt"></i> Submission Status</h3>
+                                    <p><strong>Status:</strong> 
+                                        <span class="status-badge status-<?php echo $submission['status']; ?>">
+                                            <?php echo ucfirst($submission['status']); ?>
+                                        </span>
+                                    </p>
+                                    <?php if ($submission['rejection_reason']): ?>
+                                        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--admin-danger); border-radius: 8px; padding: 1rem; margin-top: 1rem;">
+                                            <h4 style="color: var(--admin-danger);"><i class="fas fa-exclamation-circle"></i> Rejection Reason</h4>
+                                            <p><?php echo htmlspecialchars($submission['rejection_reason']); ?></p>
                                         </div>
                                     <?php endif; ?>
                                 </div>
                             </div>
                             
-                            <!-- Document Details -->
-                            <div style="margin: 20px 0;">
-                                <h4>Document Information</h4>
-                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                                    <div>
-                                        <strong>Type:</strong> <?php echo ucfirst(str_replace('_', ' ', $record['document_type'])); ?>
-                                    </div>
-                                    <div>
-                                        <strong>Number:</strong> <?php echo htmlspecialchars($record['document_number']); ?>
-                                    </div>
-                                    <div>
-                                        <strong>Name:</strong> <?php echo htmlspecialchars($record['first_name'] . ' ' . $record['last_name']); ?>
-                                    </div>
-                                    <div>
-                                        <strong>DOB:</strong> <?php echo date('M j, Y', strtotime($record['date_of_birth'])); ?>
-                                    </div>
-                                    <?php if ($record['issue_date']): ?>
-                                        <div>
-                                            <strong>Issue Date:</strong> <?php echo date('M j, Y', strtotime($record['issue_date'])); ?>
-                                        </div>
+                            <h3><i class="fas fa-images"></i> Submitted Documents</h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1rem;">
+                                <div>
+                                    <h4><i class="fas fa-camera"></i> User Photo</h4>
+                                    <?php if (file_exists($submission['photo_path'])): ?>
+                                        <?php if (strpos($submission['photo_path'], '.pdf') !== false): ?>
+                                            <i class="fas fa-file-pdf" style="font-size: 4rem; color: #dc2626; margin: 1rem 0;"></i>
+                                            <p>PDF Document - <a href="<?php echo htmlspecialchars($submission['photo_path']); ?>" target="_blank">View PDF</a></p>
+                                        <?php else: ?>
+                                            <img src="<?php echo '../' . htmlspecialchars($submission['photo_path']); ?>" 
+                                                 alt="User photo" class="document-preview" 
+                                                 onclick="openModal('<?php echo htmlspecialchars($submission['photo_path']); ?>')">
+                                            <p><a href="<?php echo '../' . htmlspecialchars($submission['photo_path']); ?>" target="_blank">View Full Size</a></p>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <p style="color: var(--admin-text-secondary);">Photo not available</p>
                                     <?php endif; ?>
-                                    <?php if ($record['expiry_date']): ?>
-                                        <div>
-                                            <strong>Expiry Date:</strong> <?php echo date('M j, Y', strtotime($record['expiry_date'])); ?>
-                                        </div>
+                                </div>
+                                
+                                <div>
+                                    <h4><i class="fas fa-id-card"></i> ID Document</h4>
+                                    <?php if (file_exists($submission['document_path'])): ?>
+                                        <?php if (strpos($submission['document_path'], '.pdf') !== false): ?>
+                                            <i class="fas fa-file-pdf" style="font-size: 4rem; color: #dc2626; margin: 1rem 0;"></i>
+                                            <p>PDF Document - <a href="<?php echo htmlspecialchars($submission['document_path']); ?>" target="_blank">View PDF</a></p>
+                                        <?php else: ?>
+                                            <img src="<?php echo '../' . htmlspecialchars($submission['document_path']); ?>" 
+                                                 alt="ID document" class="document-preview" 
+                                                 onclick="openModal('<?php echo htmlspecialchars($submission['document_path']); ?>')">
+                                            <p><a href="<?php echo '../' . htmlspecialchars($submission['document_path']); ?>" target="_blank">View Full Size</a></p>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <p style="color: var(--admin-text-secondary);">Document not available</p>
                                     <?php endif; ?>
                                 </div>
                             </div>
                             
-                            <!-- Document Images -->
-                            <div class="document-images">
-                                <div class="document-image">
-                                    <img src="../<?php echo htmlspecialchars($record['front_image']); ?>" alt="Front of document">
-                                    <div class="document-label">Front of Document</div>
-                                </div>
-                                <?php if ($record['back_image']): ?>
-                                    <div class="document-image">
-                                        <img src="../<?php echo htmlspecialchars($record['back_image']); ?>" alt="Back of document">
-                                        <div class="document-label">Back of Document</div>
+                            <?php if ($submission['status'] === 'pending'): ?>
+                                <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid var(--admin-border);">
+                                    <h3><i class="fas fa-gavel"></i> Review Actions</h3>
+                                    
+                                    <form method="POST" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem;">
+                                        <input type="hidden" name="id" value="<?php echo $submission['id']; ?>">
+                                        
+                                        <button type="submit" name="approve_kyc" class="btn btn-success">
+                                            <i class="fas fa-check"></i> Approve Verification
+                                        </button>
+                                        
+                                        <button type="button" class="btn btn-danger" onclick="document.getElementById('rejectReason').style.display = 'block'">
+                                            <i class="fas fa-times"></i> Reject Verification
+                                        </button>
+                                    </form>
+                                    
+                                    <div id="rejectReason" style="display: none; margin-top: 1rem;">
+                                        <form method="POST">
+                                            <input type="hidden" name="id" value="<?php echo $submission['id']; ?>">
+                                            <div class="form-group">
+                                                <label>Rejection Reason <span style="color: var(--admin-danger;">*</span></label>
+                                                <textarea name="rejection_reason" class="form-control" rows="3" 
+                                                          placeholder="Please provide a clear reason for rejection..." required></textarea>
+                                            </div>
+                                            <div class="form-group">
+                                                <button type="submit" name="reject_kyc" class="btn btn-danger">
+                                                    <i class="fas fa-times"></i> Confirm Rejection
+                                                </button>
+                                                <button type="button" class="btn btn-secondary" onclick="document.getElementById('rejectReason').style.display = 'none'">
+                                                    <i class="fas fa-times"></i> Cancel
+                                                </button>
+                                            </div>
+                                        </form>
                                     </div>
-                                <?php endif; ?>
-                                <?php if ($record['selfie_image']): ?>
-                                    <div class="document-image">
-                                        <img src="../<?php echo htmlspecialchars($record['selfie_image']); ?>" alt="Selfie with document">
-                                        <div class="document-label">Selfie with Document</div>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <!-- Admin Notes -->
-                            <?php if ($record['admin_notes']): ?>
-                                <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin: 20px 0;">
-                                    <strong>Admin Notes:</strong>
-                                    <p style="margin: 10px 0 0 0;"><?php echo nl2br(htmlspecialchars($record['admin_notes'])); ?></p>
                                 </div>
                             <?php endif; ?>
                             
-                            <!-- Action Form -->
-                            <?php if ($record['status'] === 'pending' || $record['status'] === 'review_required'): ?>
-                                <form method="POST" class="action-form" data-kyc-id="<?php echo $record['id']; ?>">
-                                    <input type="hidden" name="kyc_id" value="<?php echo $record['id']; ?>">
-                                    
-                                    <div style="margin: 20px 0;">
-                                        <label for="admin_notes_<?php echo $record['id']; ?>">Admin Notes:</label>
-                                        <textarea id="admin_notes_<?php echo $record['id']; ?>" name="admin_notes" 
-                                                  placeholder="Add notes for the user..." 
-                                                  style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary);"><?php echo htmlspecialchars($record['admin_notes'] ?? ''); ?></textarea>
-                                    </div>
-                                    
-                                    <div class="action-buttons">
-                                        <button type="submit" name="action" value="approve" class="btn btn-success btn-small">
-                                            <i class="fas fa-check"></i> Approve
-                                        </button>
-                                        <button type="submit" name="action" value="reject" class="btn btn-danger btn-small">
-                                            <i class="fas fa-times"></i> Reject
-                                        </button>
-                                        <button type="submit" name="action" value="request_changes" class="btn btn-warning btn-small">
-                                            <i class="fas fa-edit"></i> Request Changes
-                                        </button>
-                                    </div>
-                                </form>
+                            <div style="margin-top: 2rem; text-align: center;">
+                                <a href="index.php?page=kyc" class="btn btn-outline">
+                                    <i class="fas fa-arrow-left"></i> Back to List
+                                </a>
+                                <a href="../profile.php?id=<?php echo $submission['user_id']; ?>" class="btn btn-primary" target="_blank">
+                                    <i class="fas fa-user"></i> View User Profile
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            <?php else: ?>
+                <!-- Submissions List -->
+                <div class="admin-content">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2><i class="fas fa-list"></i> KYC Submissions</h2>
+                            <?php if ($status_filter): ?>
+                                <span style="color: var(--admin-text-secondary);">
+                                    Filtering by: <?php echo ucfirst($status_filter); ?>
+                                </span>
                             <?php endif; ?>
                         </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-                
-                <!-- Pagination -->
-                <?php if ($total_pages > 1): ?>
-                    <div class="pagination">
-                        <?php if ($page > 1): ?>
-                            <a href="?status=<?php echo $status_filter; ?>&page=<?php echo $page - 1; ?>">&laquo; Previous</a>
-                        <?php endif; ?>
                         
-                        <?php for ($i = max(1, $page - 2); $i <= min($total_pages, $page + 2); $i++): ?>
-                            <?php if ($i == $page): ?>
-                                <span class="current"><?php echo $i; ?></span>
+                        <div class="card-body">
+                            <?php if (empty($submissions)): ?>
+                                <div class="empty-state">
+                                    <i class="fas fa-inbox"></i>
+                                    <p>No KYC submissions found</p>
+                                    <?php if ($status_filter): ?>
+                                        <a href="index.php?page=kyc" class="btn btn-primary">View All Submissions</a>
+                                    <?php endif; ?>
+                                </div>
                             <?php else: ?>
-                                <a href="?status=<?php echo $status_filter; ?>&page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                <div class="table-responsive">
+                                    <table class="admin-table">
+                                        <thead>
+                                            <tr>
+                                                <th>User</th>
+                                                <th>Status</th>
+                                                <th>Submitted</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($submissions as $sub): ?>
+                                                <tr>
+                                                    <td>
+                                                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                                            <img src="<?php echo !empty($sub['avatar']) ? '../' . htmlspecialchars($sub['avatar']) : '../assets/images/default-avatar.png'; ?>" 
+                                                                 alt="Avatar" style="width: 32px; height: 32px; border-radius: 50%;">
+                                                            <div>
+                                                                <div style="font-weight: 500;"><?php echo htmlspecialchars($sub['username']); ?></div>
+                                                                <div style="font-size: 0.85rem; color: var(--admin-text-secondary);">
+                                                                    <?php echo htmlspecialchars($sub['email']); ?>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span class="status-badge status-<?php echo $sub['status']; ?>">
+                                                            <?php echo ucfirst($sub['status']); ?>
+                                                        </span>
+                                                    </td>
+                                                    <td><?php echo date('M j, Y', strtotime($sub['created_at'])); ?></td>
+                                                    <td>
+                                                        <a href="?page=kyc&action=view&id=<?php echo $sub['id']; ?>" class="btn btn-sm btn-outline">
+                                                            <i class="fas fa-eye"></i> Review
+                                                        </a>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <!-- Pagination -->
+                                <?php if ($total_pages > 1): ?>
+                                    <div class="pagination">
+                                        <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                                            <a href="?page=kyc&page=<?php echo $i; ?><?php echo $status_filter ? '&status=' . $status_filter : ''; ?>" 
+                                               class="btn btn-sm <?php echo $i === $page ? 'btn-primary' : 'btn-outline'; ?>">
+                                                <?php echo $i; ?>
+                                            </a>
+                                        <?php endfor; ?>
+                                    </div>
+                                <?php endif; ?>
                             <?php endif; ?>
-                        <?php endfor; ?>
-                        
-                        <?php if ($page < $total_pages): ?>
-                            <a href="?status=<?php echo $status_filter; ?>&page=<?php echo $page + 1; ?>">Next &raquo;</a>
-                        <?php endif; ?>
+                        </div>
                     </div>
-                <?php endif; ?>
-            </div>
+                </div>
+            <?php endif; ?>
         </main>
     </div>
-    
+
+    <!-- Image Modal -->
+    <div class="modal" id="imageModal">
+        <div class="modal-content" style="text-align: center;">
+            <button onclick="closeModal()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; color: var(--admin-text-primary); font-size: 1.5rem; cursor: pointer;">×</button>
+            <img id="modalImage" src="" alt="Document" style="max-width: 100%; max-height: 80vh;">
+        </div>
+    </div>
+
     <script>
-        // Confirm actions
-        document.querySelectorAll('.action-form').forEach(form => {
-            form.addEventListener('submit', function(e) {
-                const action = e.submitter.value;
-                const kycId = form.dataset.kycId;
-                
-                let message = '';
-                switch(action) {
-                    case 'approve':
-                        message = 'Are you sure you want to APPROVE this KYC verification?';
-                        break;
-                    case 'reject':
-                        message = 'Are you sure you want to REJECT this KYC verification?';
-                        break;
-                    case 'request_changes':
-                        message = 'Are you sure you want to request changes for this KYC verification?';
-                        break;
-                }
-                
-                if (!confirm(message)) {
-                    e.preventDefault();
-                }
-            });
+        function openModal(imageSrc) {
+            document.getElementById('modalImage').src = '../' + imageSrc;
+            document.getElementById('imageModal').classList.add('active');
+        }
+        
+        function closeModal() {
+            document.getElementById('imageModal').classList.remove('active');
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('imageModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
         });
     </script>
 </body>

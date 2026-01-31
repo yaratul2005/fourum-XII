@@ -8,7 +8,7 @@
         <!-- Dashboard -->
         <div class="menu-section">
             <h3>Main</h3>
-            <a href="dashboard.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'dashboard.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=dashboard" class="nav-item <?php echo (!isset($_GET['page']) || $_GET['page'] === 'dashboard') ? 'active' : ''; ?>">
                 <i class="fas fa-chart-line"></i> Dashboard
             </a>
         </div>
@@ -16,10 +16,10 @@
         <!-- User Management -->
         <div class="menu-section">
             <h3>User Management</h3>
-            <a href="users.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'users.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=users" class="nav-item <?php echo (isset($_GET['page']) && $_GET['page'] === 'users') ? 'active' : ''; ?>">
                 <i class="fas fa-users"></i> Users
             </a>
-            <a href="kyc-management.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'kyc-management.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=kyc" class="nav-item <?php echo (isset($_GET['page']) && $_GET['page'] === 'kyc') ? 'active' : ''; ?>">
                 <i class="fas fa-id-card"></i> KYC Verification
             </a>
         </div>
@@ -27,13 +27,13 @@
         <!-- Content Management -->
         <div class="menu-section">
             <h3>Content</h3>
-            <a href="posts.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'posts.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=posts" class="nav-item <?php echo (isset($_GET['page']) && $_GET['page'] === 'posts') ? 'active' : ''; ?>">
                 <i class="fas fa-comments"></i> Posts & Comments
             </a>
-            <a href="categories-management.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'categories-management.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=categories" class="nav-item <?php echo (isset($_GET['page']) && $_GET['page'] === 'categories') ? 'active' : ''; ?>">
                 <i class="fas fa-tags"></i> Categories
             </a>
-            <a href="reports.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'reports.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=reports" class="nav-item <?php echo (isset($_GET['page']) && $_GET['page'] === 'reports') ? 'active' : ''; ?>">
                 <i class="fas fa-flag"></i> Reports
             </a>
         </div>
@@ -41,22 +41,31 @@
         <!-- System Settings -->
         <div class="menu-section">
             <h3>System</h3>
-            <a href="smtp-settings.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'smtp-settings.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=smtp" class="nav-item <?php echo (isset($_GET['page']) && $_GET['page'] === 'smtp') ? 'active' : ''; ?>">
                 <i class="fas fa-envelope"></i> SMTP Settings
             </a>
-            <a href="email-test-tool.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'email-test-tool.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=email-test" class="nav-item <?php echo (isset($_GET['page']) && $_GET['page'] === 'email-test') ? 'active' : ''; ?>">
                 <i class="fas fa-flask"></i> Email Testing
             </a>
-            <a href="google-auth-settings.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'google-auth-settings.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=google-auth" class="nav-item <?php echo (isset($_GET['page']) && $_GET['page'] === 'google-auth') ? 'active' : ''; ?>">
                 <i class="fab fa-google"></i> Google Auth
             </a>
-            <a href="settings.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'settings.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=settings" class="nav-item <?php echo (isset($_GET['page']) && $_GET['page'] === 'settings') ? 'active' : ''; ?>">
                 <i class="fas fa-cog"></i> General Settings
             </a>
-            <a href="backup.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) === 'backup.php' ? 'active' : ''; ?>">
+            <a href="index.php?page=backup" class="nav-item <?php echo (isset($_GET['page']) && $_GET['page'] === 'backup') ? 'active' : ''; ?>">
                 <i class="fas fa-database"></i> Backup
             </a>
         </div>
+    </div>
+    
+    <div class="sidebar-footer">
+        <a href="../index.php" class="nav-item">
+            <i class="fas fa-arrow-left"></i> Back to Site
+        </a>
+        <a href="../logout.php" class="nav-item">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
     </div>
 </nav>
 

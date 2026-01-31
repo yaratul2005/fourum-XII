@@ -210,4 +210,49 @@ VALUES
 ('Gaming', 'Video games, gaming culture, and entertainment', 'gaming', 1, 'active', NOW(), 1),
 ('Science', 'Scientific discoveries and research discussions', 'science', 1, 'active', NOW(), 1);
 
+-- V5 Schema Updates - Enhanced Admin Controls
+-- Run this after the initial v5-schema-updates.sql
+
+-- Add header/footer customization fields to settings table
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS header_title VARCHAR(100) DEFAULT 'FUROM';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS header_subtitle VARCHAR(200) DEFAULT 'Futuristic Community Platform';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS footer_text TEXT DEFAULT '© 2024 Furom. All rights reserved.';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS show_header_logo BOOLEAN DEFAULT TRUE;
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS header_custom_css TEXT DEFAULT '';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS footer_custom_html TEXT DEFAULT '';
+
+-- Insert default values if they don't exist
+INSERT IGNORE INTO settings (setting_key, setting_value, setting_type) VALUES 
+('header_title', 'FUROM', 'string'),
+('header_subtitle', 'Futuristic Community Platform', 'string'),
+('footer_text', '© 2024 Furom. All rights reserved.', 'text'),
+('show_header_logo', '1', 'boolean'),
+('header_custom_css', '', 'text'),
+('footer_custom_html', '', 'text');
+
+-- Create site_appearance table for advanced customization
+CREATE TABLE IF NOT EXISTS site_appearance (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    setting_name VARCHAR(50) UNIQUE NOT NULL,
+    setting_value TEXT,
+    setting_type ENUM('color', 'text', 'boolean', 'html') DEFAULT 'text',
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Insert default appearance settings
+INSERT IGNORE INTO site_appearance (setting_name, setting_value, setting_type, description) VALUES
+('primary_color', '#00f5ff', 'color', 'Primary brand color'),
+('secondary_color', '#ff00ff', 'color', 'Secondary accent color'),
+('background_color', '#0a0a1a', 'color', 'Main background color'),
+('text_color', '#ffffff', 'color', 'Primary text color'),
+('enable_particles', '1', 'boolean', 'Enable particle background effect'),
+('custom_header_html', '', 'html', 'Custom HTML for header'),
+('custom_footer_html', '', 'html', 'Custom HTML for footer');
+
+-- Add indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_settings_key ON settings(setting_key);
+CREATE INDEX IF NOT EXISTS idx_appearance_name ON site_appearance(setting_name);
+
 COMMIT;

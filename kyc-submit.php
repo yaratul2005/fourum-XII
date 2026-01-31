@@ -1,148 +1,109 @@
 <?php
-// KYC Verification Submission Page
 require_once 'config.php';
 require_once 'includes/functions.php';
 
-if (session_status() == PHP_SESSION_NONE) {
-    session_start();
-}
+redirect_if_not_logged_in();
 
-// Check if user is logged in
-if (!is_logged_in()) {
-    header('Location: login.php');
+$user_id = get_current_user_id();
+$user_data = get_user_data($user_id);
+
+// Check if user already has a pending or approved submission
+$stmt = $pdo->prepare("SELECT * FROM kyc_submissions WHERE user_id = ? AND status IN ('pending', 'approved') ORDER BY created_at DESC LIMIT 1");
+$stmt->execute([$user_id]);
+$existing_submission = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if ($existing_submission) {
+    header('Location: kyc-status.php');
     exit();
-}
-
-$current_user = get_user_data(get_current_user_id());
-
-// Check if KYC is enabled
-$kyc_enabled = get_setting('kyc_enabled', '1');
-if ($kyc_enabled !== '1') {
-    header('Location: index.php');
-    exit();
-}
-
-// Check minimum EXP requirement
-$kyc_min_level = (int)get_setting('kyc_min_level', '500');
-if ($current_user['exp'] < $kyc_min_level) {
-    $message = "You need at least {$kyc_min_level} EXP to submit KYC verification.";
-    $message_type = 'error';
 }
 
 $errors = [];
 $success = '';
 
-// Handle KYC submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($message)) {
-    try {
-        // Validate required fields
-        $required_fields = ['document_type', 'document_number', 'first_name', 'last_name', 'date_of_birth'];
-        foreach ($required_fields as $field) {
-            if (empty($_POST[$field])) {
-                $errors[] = "Please fill in the {$field} field.";
-            }
-        }
-        
-        // Check if user already has pending KYC
-        $stmt = $pdo->prepare("SELECT id, status FROM kyc_documents WHERE user_id = ? AND status = 'pending'");
-        $stmt->execute([$current_user['id']]);
-        if ($stmt->fetch()) {
-            $errors[] = 'You already have a pending KYC verification.';
-        }
-        
-        // Handle file uploads
-        $uploaded_files = [];
-        $upload_dir = 'uploads/kyc/';
-        
-        // Create upload directory if it doesn't exist
-        if (!is_dir($upload_dir)) {
-            mkdir($upload_dir, 0755, true);
-        }
-        
-        $file_fields = ['front_image', 'back_image', 'selfie_image'];
-        foreach ($file_fields as $field) {
-            if (isset($_FILES[$field]) && $_FILES[$field]['error'] === UPLOAD_ERR_OK) {
-                $file = $_FILES[$field];
-                
-                // Validate file type
-                $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
-                if (!in_array($file['type'], $allowed_types)) {
-                    $errors[] = "Invalid file type for {$field}. Please upload JPG, PNG, or GIF files only.";
-                    continue;
-                }
-                
-                // Validate file size (max 5MB)
-                if ($file['size'] > 5 * 1024 * 1024) {
-                    $errors[] = "File {$field} is too large. Maximum size is 5MB.";
-                    continue;
-                }
-                
-                // Generate unique filename
-                $extension = pathinfo($file['name'], PATHINFO_EXTENSION);
-                $filename = uniqid() . '_' . $field . '.' . $extension;
-                $filepath = $upload_dir . $filename;
-                
-                if (move_uploaded_file($file['tmp_name'], $filepath)) {
-                    $uploaded_files[$field] = $filepath;
-                } else {
-                    $errors[] = "Failed to upload {$field}. Please try again.";
-                }
-            } elseif ($field === 'front_image') {
-                $errors[] = 'Front image of document is required.';
-            }
-        }
-        
-        if (empty($errors)) {
-            // Insert KYC record
-            $stmt = $pdo->prepare("
-                INSERT INTO kyc_documents 
-                (user_id, document_type, document_number, first_name, last_name, date_of_birth, 
-                 issue_date, expiry_date, front_image, back_image, selfie_image, status, submitted_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())
-            ");
-            
-            $result = $stmt->execute([
-                $current_user['id'],
-                $_POST['document_type'],
-                $_POST['document_number'],
-                $_POST['first_name'],
-                $_POST['last_name'],
-                $_POST['date_of_birth'],
-                $_POST['issue_date'] ?? null,
-                $_POST['expiry_date'] ?? null,
-                $uploaded_files['front_image'],
-                $uploaded_files['back_image'] ?? null,
-                $uploaded_files['selfie_image'] ?? null
-            ]);
-            
-            if ($result) {
-                // Log the submission
-                $kyc_id = $pdo->lastInsertId();
-                log_kyc_action($kyc_id, 'submitted', $current_user['id']);
-                
-                // Update user KYC status
-                $stmt = $pdo->prepare("UPDATE users SET kyc_status = 'pending' WHERE id = ?");
-                $stmt->execute([$current_user['id']]);
-                
-                // Send notification to admins
-                send_admin_notification('New KYC submission pending review', "User {$current_user['username']} has submitted KYC verification.");
-                
-                $success = 'KYC verification submitted successfully! Our team will review your documents within 24-48 hours.';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $step = intval($_POST['step'] ?? 1);
+    
+    if ($step === 1) {
+        // Step 1: Photo submission
+        if (!isset($_FILES['user_photo']) || $_FILES['user_photo']['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'Please upload a clear photo of yourself';
+        } else {
+            $photo_result = handle_kyc_file_upload($_FILES['user_photo'], 'photo', $user_id);
+            if (!$photo_result['success']) {
+                $errors[] = $photo_result['error'];
             } else {
-                $errors[] = 'Failed to submit KYC verification. Please try again.';
+                $_SESSION['kyc_photo_path'] = $photo_result['path'];
+                $success = 'Photo uploaded successfully! Please proceed to document submission.';
             }
         }
-        
-    } catch (Exception $e) {
-        error_log("KYC submission error: " . $e->getMessage());
-        $errors[] = 'An error occurred while processing your submission. Please try again.';
+    } elseif ($step === 2) {
+        // Step 2: Document submission
+        if (!isset($_SESSION['kyc_photo_path'])) {
+            $errors[] = 'Please complete step 1 first';
+        } elseif (!isset($_FILES['document']) || $_FILES['document']['error'] !== UPLOAD_ERR_OK) {
+            $errors[] = 'Please upload a valid identification document';
+        } else {
+            $doc_result = handle_kyc_file_upload($_FILES['document'], 'document', $user_id);
+            if (!$doc_result['success']) {
+                $errors[] = $doc_result['error'];
+            } else {
+                // Save to database
+                try {
+                    $stmt = $pdo->prepare("INSERT INTO kyc_submissions (user_id, photo_path, document_path, status, created_at) VALUES (?, ?, ?, 'pending', NOW())");
+                    $stmt->execute([
+                        $user_id,
+                        $_SESSION['kyc_photo_path'],
+                        $doc_result['path']
+                    ]);
+                    
+                    // Clean up session
+                    unset($_SESSION['kyc_photo_path']);
+                    
+                    $success = 'KYC submission completed successfully! Your verification is now pending review.';
+                    header("refresh:3;kyc-status.php");
+                    
+                } catch (Exception $e) {
+                    $errors[] = 'Failed to submit KYC: ' . $e->getMessage();
+                }
+            }
+        }
     }
 }
 
-// Get user's current KYC status
-$stmt = $pdo->prepare("SELECT * FROM kyc_documents WHERE user_id = ? ORDER BY submitted_at DESC LIMIT 1");
-$stmt->execute([$current_user['id']]);
-$current_kyc = $stmt->fetch();
+function handle_kyc_file_upload($file, $type, $user_id) {
+    $allowed_types = [
+        'photo' => ['image/jpeg', 'image/png', 'image/jpg'],
+        'document' => ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf']
+    ];
+    
+    $max_sizes = [
+        'photo' => 5 * 1024 * 1024, // 5MB
+        'document' => 10 * 1024 * 1024 // 10MB
+    ];
+    
+    if (!in_array($file['type'], $allowed_types[$type])) {
+        return ['success' => false, 'error' => "Invalid {$type} file type"];
+    }
+    
+    if ($file['size'] > $max_sizes[$type]) {
+        return ['success' => false, 'error' => "{$type} file too large"];
+    }
+    
+    $upload_dir = "uploads/kyc/{$user_id}/";
+    if (!is_dir($upload_dir)) {
+        mkdir($upload_dir, 0755, true);
+    }
+    
+    $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    $filename = "{$type}_" . time() . ".{$extension}";
+    $filepath = $upload_dir . $filename;
+    
+    if (move_uploaded_file($file['tmp_name'], $filepath)) {
+        return ['success' => true, 'path' => $filepath];
+    } else {
+        return ['success' => false, 'error' => "Failed to upload {$type}"];
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -162,86 +123,138 @@ $current_kyc = $stmt->fetch();
         
         .kyc-header {
             text-align: center;
+            padding: 2rem;
+            background: linear-gradient(135deg, var(--card-bg), var(--darker-bg));
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
             margin-bottom: 2rem;
         }
         
-        .kyc-card {
+        .progress-steps {
+            display: flex;
+            justify-content: center;
+            margin: 2rem 0;
+            position: relative;
+        }
+        
+        .progress-steps::before {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 15%;
+            right: 15%;
+            height: 2px;
+            background: var(--border-color);
+            z-index: 1;
+        }
+        
+        .step {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-weight: bold;
+            position: relative;
+            z-index: 2;
+        }
+        
+        .step.active {
+            background: var(--primary);
+            color: var(--darker-bg);
+            box-shadow: 0 0 15px var(--primary);
+        }
+        
+        .step.completed {
+            background: var(--success);
+            color: var(--darker-bg);
+        }
+        
+        .step-label {
+            position: absolute;
+            top: 45px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+        
+        .kyc-form {
             background: var(--card-bg);
             border-radius: 15px;
             padding: 2rem;
-            margin-bottom: 2rem;
             border: 1px solid var(--border-color);
         }
         
-        .kyc-status {
-            text-align: center;
-            padding: 1.5rem;
-            border-radius: 10px;
-            margin-bottom: 2rem;
+        .form-step {
+            display: none;
         }
         
-        .status-pending {
-            background: rgba(245, 158, 11, 0.15);
-            border: 1px solid rgba(245, 158, 11, 0.3);
-            color: #f59e0b;
+        .form-step.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
         }
         
-        .status-approved {
-            background: rgba(16, 185, 129, 0.15);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            color: #10b981;
-        }
-        
-        .status-rejected {
-            background: rgba(239, 68, 68, 0.15);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #ef4444;
-        }
-        
-        .file-upload {
+        .file-upload-area {
             border: 2px dashed var(--border-color);
             border-radius: 10px;
             padding: 2rem;
             text-align: center;
-            margin: 1rem 0;
-            transition: all 0.3s ease;
             cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 1rem 0;
         }
         
-        .file-upload:hover {
+        .file-upload-area:hover {
             border-color: var(--primary);
             background: rgba(0, 245, 255, 0.05);
         }
         
-        .file-upload.dragover {
+        .file-upload-area.dragover {
             border-color: var(--primary);
             background: rgba(0, 245, 255, 0.1);
+            transform: scale(1.02);
         }
         
         .preview-image {
             max-width: 100%;
-            max-height: 200px;
-            border-radius: 8px;
-            margin-top: 10px;
-            display: none;
+            max-height: 300px;
+            border-radius: 10px;
+            margin: 1rem 0;
+            border: 1px solid var(--border-color);
         }
         
         .requirements {
-            background: rgba(59, 130, 246, 0.1);
-            border: 1px solid rgba(59, 130, 246, 0.3);
+            background: rgba(0, 245, 255, 0.1);
+            border: 1px solid var(--primary);
             border-radius: 10px;
             padding: 1.5rem;
-            margin: 1.5rem 0;
+            margin: 1rem 0;
         }
         
-        .requirements h3 {
-            color: var(--primary);
-            margin-top: 0;
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
-        .requirements ul {
-            color: var(--text-secondary);
-            line-height: 1.6;
+        @media (max-width: 768px) {
+            .progress-steps {
+                margin: 1rem 0;
+            }
+            
+            .progress-steps::before {
+                left: 10%;
+                right: 10%;
+            }
+            
+            .step-label {
+                font-size: 0.7rem;
+                top: 40px;
+            }
         }
     </style>
 </head>
@@ -253,18 +266,12 @@ $current_kyc = $stmt->fetch();
             <div class="kyc-container">
                 <div class="kyc-header">
                     <h1><i class="fas fa-id-card"></i> KYC Verification</h1>
-                    <p>Verify your identity to unlock advanced features and create categories</p>
+                    <p>Verify your identity to unlock premium features and increased trust</p>
                 </div>
                 
-                <?php if ($message): ?>
+                <?php if ($errors): ?>
                     <div class="alert error">
-                        <?php echo htmlspecialchars($message); ?>
-                    </div>
-                <?php endif; ?>
-                
-                <?php if (!empty($errors)): ?>
-                    <div class="alert error">
-                        <h4>Please fix the following errors:</h4>
+                        <h4><i class="fas fa-exclamation-circle"></i> Please correct the following:</h4>
                         <ul>
                             <?php foreach ($errors as $error): ?>
                                 <li><?php echo htmlspecialchars($error); ?></li>
@@ -279,145 +286,100 @@ $current_kyc = $stmt->fetch();
                     </div>
                 <?php endif; ?>
                 
-                <?php if ($current_kyc): ?>
-                    <div class="kyc-card">
-                        <h2>Your Current KYC Status</h2>
-                        <div class="kyc-status status-<?php echo $current_kyc['status']; ?>">
-                            <h3>
-                                <?php 
-                                switch ($current_kyc['status']) {
-                                    case 'pending': echo '<i class="fas fa-clock"></i> Pending Review'; break;
-                                    case 'approved': echo '<i class="fas fa-check-circle"></i> Verified'; break;
-                                    case 'rejected': echo '<i class="fas fa-times-circle"></i> Rejected'; break;
-                                    default: echo '<i class="fas fa-question-circle"></i> Unknown Status';
-                                }
-                                ?>
-                            </h3>
-                            <p>Submitted on <?php echo date('M j, Y', strtotime($current_kyc['submitted_at'])); ?></p>
-                            <?php if ($current_kyc['admin_notes']): ?>
-                                <div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
-                                    <strong>Admin Notes:</strong> <?php echo htmlspecialchars($current_kyc['admin_notes']); ?>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                        
-                        <?php if ($current_kyc['status'] === 'rejected'): ?>
-                            <p>You can submit a new KYC verification below.</p>
-                        <?php endif; ?>
+                <!-- Progress Steps -->
+                <div class="progress-steps">
+                    <div class="step active" id="step1-indicator">
+                        1
+                        <div class="step-label">Your Photo</div>
                     </div>
-                <?php endif; ?>
+                    <div class="step" id="step2-indicator">
+                        2
+                        <div class="step-label">ID Document</div>
+                    </div>
+                </div>
                 
-                <?php if (!$current_kyc || $current_kyc['status'] === 'rejected'): ?>
-                    <div class="kyc-card">
-                        <h2>Submit KYC Verification</h2>
+                <div class="kyc-form">
+                    <!-- Step 1: Photo Submission -->
+                    <div class="form-step active" id="step1">
+                        <h2><i class="fas fa-camera"></i> Step 1: Upload Your Photo</h2>
+                        <p>Please upload a clear, well-lit photo of yourself holding your ID document.</p>
                         
                         <div class="requirements">
-                            <h3><i class="fas fa-info-circle"></i> Requirements</h3>
+                            <h4><i class="fas fa-info-circle"></i> Photo Requirements:</h4>
                             <ul>
-                                <li>Government-issued photo ID (Passport, Driver's License, or National ID)</li>
-                                <li>Clear, well-lit photos of both sides of your ID</li>
-                                <li>A selfie holding your ID</li>
-                                <li>All information must be clearly visible and legible</li>
-                                <li>Documents must not be expired</li>
-                                <li>File size limit: 5MB per image</li>
-                                <li>Supported formats: JPG, PNG, GIF</li>
+                                <li>Clear, high-quality image</li>
+                                <li>Good lighting conditions</li>
+                                <li>Face clearly visible</li>
+                                <li>Holding your ID document</li>
+                                <li>File size under 5MB</li>
+                                <li>JPG or PNG format only</li>
                             </ul>
                         </div>
                         
-                        <form method="POST" enctype="multipart/form-data" id="kyc-form">
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="document_type">Document Type *</label>
-                                    <select id="document_type" name="document_type" required>
-                                        <option value="">Select Document Type</option>
-                                        <option value="passport" <?php echo ($_POST['document_type'] ?? '') === 'passport' ? 'selected' : ''; ?>>Passport</option>
-                                        <option value="driver_license" <?php echo ($_POST['document_type'] ?? '') === 'driver_license' ? 'selected' : ''; ?>>Driver's License</option>
-                                        <option value="national_id" <?php echo ($_POST['document_type'] ?? '') === 'national_id' ? 'selected' : ''; ?>>National ID Card</option>
-                                        <option value="other" <?php echo ($_POST['document_type'] ?? '') === 'other' ? 'selected' : ''; ?>>Other</option>
-                                    </select>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="document_number">Document Number *</label>
-                                    <input type="text" id="document_number" name="document_number" 
-                                           value="<?php echo htmlspecialchars($_POST['document_number'] ?? ''); ?>" 
-                                           required>
-                                </div>
-                            </div>
-                            
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="first_name">First Name *</label>
-                                    <input type="text" id="first_name" name="first_name" 
-                                           value="<?php echo htmlspecialchars($_POST['first_name'] ?? ''); ?>" 
-                                           required>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="last_name">Last Name *</label>
-                                    <input type="text" id="last_name" name="last_name" 
-                                           value="<?php echo htmlspecialchars($_POST['last_name'] ?? ''); ?>" 
-                                           required>
-                                </div>
-                            </div>
-                            
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="date_of_birth">Date of Birth *</label>
-                                    <input type="date" id="date_of_birth" name="date_of_birth" 
-                                           value="<?php echo htmlspecialchars($_POST['date_of_birth'] ?? ''); ?>" 
-                                           required>
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="issue_date">Issue Date</label>
-                                    <input type="date" id="issue_date" name="issue_date" 
-                                           value="<?php echo htmlspecialchars($_POST['issue_date'] ?? ''); ?>">
-                                </div>
-                                
-                                <div class="form-group">
-                                    <label for="expiry_date">Expiry Date</label>
-                                    <input type="date" id="expiry_date" name="expiry_date" 
-                                           value="<?php echo htmlspecialchars($_POST['expiry_date'] ?? ''); ?>">
-                                </div>
-                            </div>
+                        <form method="POST" enctype="multipart/form-data" id="photoForm">
+                            <input type="hidden" name="step" value="1">
                             
                             <div class="form-group">
-                                <label>Front of Document *</label>
-                                <div class="file-upload" id="front-upload">
-                                    <i class="fas fa-cloud-upload-alt fa-2x"></i>
-                                    <p>Click or drag to upload front of document</p>
-                                    <input type="file" id="front_image" name="front_image" accept="image/*" style="display: none;" required>
-                                    <img id="front-preview" class="preview-image" alt="Front document preview">
-                                </div>
+                                <label class="file-upload-area" id="photoDropArea">
+                                    <i class="fas fa-cloud-upload-alt" style="font-size: 3rem; margin-bottom: 1rem; color: var(--primary);"></i>
+                                    <p>Click or drag your photo here</p>
+                                    <p style="font-size: 0.9rem; color: var(--text-secondary);">JPG, PNG files only (Max 5MB)</p>
+                                    <input type="file" id="user_photo" name="user_photo" accept="image/*" style="display: none;" required>
+                                </label>
                             </div>
+                            
+                            <div id="photoPreview"></div>
                             
                             <div class="form-group">
-                                <label>Back of Document</label>
-                                <div class="file-upload" id="back-upload">
-                                    <i class="fas fa-cloud-upload-alt fa-2x"></i>
-                                    <p>Click or drag to upload back of document (if applicable)</p>
-                                    <input type="file" id="back_image" name="back_image" accept="image/*" style="display: none;">
-                                    <img id="back-preview" class="preview-image" alt="Back document preview">
-                                </div>
+                                <button type="submit" class="btn btn-primary" id="nextStepBtn" disabled>
+                                    <i class="fas fa-arrow-right"></i> Next Step
+                                </button>
                             </div>
-                            
-                            <div class="form-group">
-                                <label>Selfie with Document</label>
-                                <div class="file-upload" id="selfie-upload">
-                                    <i class="fas fa-camera fa-2x"></i>
-                                    <p>Click or drag to upload selfie holding document</p>
-                                    <input type="file" id="selfie_image" name="selfie_image" accept="image/*" style="display: none;">
-                                    <img id="selfie-preview" class="preview-image" alt="Selfie preview">
-                                </div>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-primary" style="width: 100%;">
-                                <i class="fas fa-paper-plane"></i> Submit for Verification
-                            </button>
                         </form>
                     </div>
-                <?php endif; ?>
+                    
+                    <!-- Step 2: Document Submission -->
+                    <div class="form-step" id="step2">
+                        <h2><i class="fas fa-file-alt"></i> Step 2: Upload ID Document</h2>
+                        <p>Please upload a clear scan or photo of your government-issued ID document.</p>
+                        
+                        <div class="requirements">
+                            <h4><i class="fas fa-info-circle"></i> Document Requirements:</h4>
+                            <ul>
+                                <li>Government-issued ID (Passport, Driver's License, etc.)</li>
+                                <li>Full document visible</li>
+                                <li>Clear and readable text</li>
+                                <li>No glare or shadows</li>
+                                <li>File size under 10MB</li>
+                                <li>JPG, PNG, or PDF format</li>
+                            </ul>
+                        </div>
+                        
+                        <form method="POST" enctype="multipart/form-data" id="documentForm">
+                            <input type="hidden" name="step" value="2">
+                            
+                            <div class="form-group">
+                                <label class="file-upload-area" id="documentDropArea">
+                                    <i class="fas fa-file-upload" style="font-size: 3rem; margin-bottom: 1rem; color: var(--primary);"></i>
+                                    <p>Click or drag your ID document here</p>
+                                    <p style="font-size: 0.9rem; color: var(--text-secondary);">JPG, PNG, PDF files only (Max 10MB)</p>
+                                    <input type="file" id="document" name="document" accept="image/*,.pdf" style="display: none;" required>
+                                </label>
+                            </div>
+                            
+                            <div id="documentPreview"></div>
+                            
+                            <div class="form-group" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                                <button type="button" class="btn btn-outline" onclick="showStep(1)">
+                                    <i class="fas fa-arrow-left"></i> Previous
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-paper-plane"></i> Submit for Verification
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
     </main>
@@ -426,18 +388,18 @@ $current_kyc = $stmt->fetch();
     
     <script>
         // File upload handling
-        document.querySelectorAll('.file-upload').forEach(uploadArea => {
-            const input = uploadArea.querySelector('input[type="file"]');
-            const preview = uploadArea.querySelector('img');
+        function setupFileUpload(inputId, dropAreaId, previewId, fileType) {
+            const input = document.getElementById(inputId);
+            const dropArea = document.getElementById(dropAreaId);
+            const preview = document.getElementById(previewId);
+            const nextBtn = document.getElementById('nextStepBtn');
             
-            // Click to upload
-            uploadArea.addEventListener('click', () => {
-                input.click();
-            });
+            // Click to select file
+            dropArea.addEventListener('click', () => input.click());
             
             // Drag and drop
             ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                uploadArea.addEventListener(eventName, preventDefaults, false);
+                dropArea.addEventListener(eventName, preventDefaults, false);
             });
             
             function preventDefaults(e) {
@@ -446,64 +408,98 @@ $current_kyc = $stmt->fetch();
             }
             
             ['dragenter', 'dragover'].forEach(eventName => {
-                uploadArea.addEventListener(eventName, () => {
-                    uploadArea.classList.add('dragover');
-                }, false);
+                dropArea.addEventListener(eventName, highlight, false);
             });
             
             ['dragleave', 'drop'].forEach(eventName => {
-                uploadArea.addEventListener(eventName, () => {
-                    uploadArea.classList.remove('dragover');
-                }, false);
+                dropArea.addEventListener(eventName, unhighlight, false);
             });
             
-            uploadArea.addEventListener('drop', handleDrop, false);
-            
-            function handleDrop(e) {
-                const dt = e.dataTransfer;
-                const files = dt.files;
-                if (files.length) {
-                    input.files = files;
-                    handleFile(input, preview);
-                }
+            function highlight() {
+                dropArea.classList.add('dragover');
             }
             
-            // File selection
-            input.addEventListener('change', () => {
-                handleFile(input, preview);
+            function unhighlight() {
+                dropArea.classList.remove('dragover');
+            }
+            
+            // Handle file selection
+            input.addEventListener('change', function() {
+                if (this.files && this.files[0]) {
+                    const file = this.files[0];
+                    
+                    // Validate file
+                    const maxSize = fileType === 'photo' ? 5 * 1024 * 1024 : 10 * 1024 * 1024;
+                    const allowedTypes = fileType === 'photo' ? 
+                        ['image/jpeg', 'image/png', 'image/jpg'] :
+                        ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+                    
+                    if (!allowedTypes.includes(file.type)) {
+                        alert(`Please select a valid ${fileType} file`);
+                        return;
+                    }
+                    
+                    if (file.size > maxSize) {
+                        alert(`${fileType} file is too large`);
+                        return;
+                    }
+                    
+                    // Preview
+                    if (file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            preview.innerHTML = `
+                                <div style="text-align: center; margin: 1rem 0;">
+                                    <img src="${e.target.result}" class="preview-image" alt="${fileType} preview">
+                                    <p style="color: var(--success);"><i class="fas fa-check-circle"></i> ${file.name}</p>
+                                </div>
+                            `;
+                        };
+                        reader.readAsDataURL(file);
+                    } else {
+                        preview.innerHTML = `
+                            <div style="text-align: center; margin: 1rem 0;">
+                                <i class="fas fa-file-pdf" style="font-size: 3rem; color: #dc2626; margin-bottom: 1rem;"></i>
+                                <p style="color: var(--success);"><i class="fas fa-check-circle"></i> ${file.name}</p>
+                                <p style="color: var(--text-secondary);">PDF document ready for upload</p>
+                            </div>
+                        `;
+                    }
+                    
+                    // Enable next button for photo step
+                    if (fileType === 'photo' && nextBtn) {
+                        nextBtn.disabled = false;
+                    }
+                }
             });
-        });
+        }
         
-        function handleFile(input, preview) {
-            if (input.files && input.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    preview.src = e.target.result;
-                    preview.style.display = 'block';
-                };
-                reader.readAsDataURL(input.files[0]);
+        // Step navigation
+        function showStep(step) {
+            document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active', 'completed'));
+            
+            document.getElementById(`step${step}`).classList.add('active');
+            document.getElementById(`step${step}-indicator`).classList.add('active');
+            
+            // Mark previous steps as completed
+            for (let i = 1; i < step; i++) {
+                document.getElementById(`step${i}-indicator`).classList.add('completed');
             }
         }
         
-        // Form validation
-        document.getElementById('kyc-form').addEventListener('submit', function(e) {
-            const requiredFields = ['document_type', 'document_number', 'first_name', 'last_name', 'date_of_birth'];
-            let isValid = true;
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupFileUpload('user_photo', 'photoDropArea', 'photoPreview', 'photo');
+            setupFileUpload('document', 'documentDropArea', 'documentPreview', 'document');
             
-            requiredFields.forEach(field => {
-                const input = document.getElementById(field);
-                if (!input.value.trim()) {
-                    input.style.borderColor = '#ef4444';
-                    isValid = false;
-                } else {
-                    input.style.borderColor = '';
+            // Next step button
+            document.getElementById('nextStepBtn')?.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (document.getElementById('user_photo').files.length > 0) {
+                    showStep(2);
                 }
             });
-            
-            if (!isValid) {
-                e.preventDefault();
-                alert('Please fill in all required fields.');
-            }
         });
     </script>
 </body>

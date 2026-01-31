@@ -3,8 +3,8 @@
  * Includes all core styling and mobile responsiveness
  */
 
-/* Import mobile fixes */
-@import url('mobile-fixes.css');
+/* Import enhanced mobile CSS */
+@import url('mobile-enhanced.css');
 
 /* Furom V2 - Enhanced Futuristic Forum CSS */
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Exo+2:wght@300;400;500;600&display=swap');

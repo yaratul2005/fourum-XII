@@ -1,50 +1,82 @@
 <?php
 require_once 'cookie-manager.php';
+
+// Get admin-controlled footer settings
+$footer_text = get_setting('footer_text', '© 2024 Furom. All rights reserved.');
+$footer_custom_html = get_setting('footer_custom_html', '');
+$custom_footer_html = get_site_appearance('custom_footer_html', '');
 ?>
 
 <footer class="cyber-footer">
     <div class="container">
         <div class="footer-content">
-            <div class="footer-section">
-                <h3><i class="fas fa-robot"></i> FUROM <span class="version-tag">V5.1</span></h3>
-                <p>The next-generation community platform built for the future.</p>
-                <div class="upgrade-notice">
-                    <small>✨ Enhanced with smart caching and loading systems!</small>
+            <?php if (!empty($custom_footer_html)): ?>
+                <div class="custom-footer-content">
+                    <?php echo $custom_footer_html; ?>
+                </div>
+            <?php endif; ?>
+            
+            <div class="footer-info">
+                <p><?php echo $footer_text; ?></p>
+                <div class="footer-links">
+                    <a href="about.php">About</a>
+                    <a href="privacy.php">Privacy</a>
+                    <a href="terms.php">Terms</a>
+                    <a href="contact.php">Contact</a>
                 </div>
             </div>
-            <div class="footer-section">
-                <h4>Quick Links</h4>
-                <ul>
-                    <li><a href="about.php">About</a></li>
-                    <li><a href="rules.php">Community Rules</a></li>
-                    <li><a href="privacy.php">Privacy Policy</a></li>
-                    <li><a href="changelog.php">What's New</a></li>
-                </ul>
-            </div>
-            <div class="footer-section">
-                <h4>Connect</h4>
-                <div class="social-links">
-                    <a href="#"><i class="fab fa-twitter"></i></a>
-                    <a href="#"><i class="fab fa-discord"></i></a>
-                    <a href="#"><i class="fab fa-github"></i></a>
+            
+            <?php if (!empty($footer_custom_html)): ?>
+                <div class="admin-footer-content">
+                    <?php echo $footer_custom_html; ?>
                 </div>
-                <div class="theme-toggle" style="margin-top: 1rem;">
-                    <button id="themeToggle" class="btn btn-sm btn-outline">
-                        <i class="fas fa-moon"></i> Toggle Theme
-                    </button>
-                </div>
-            </div>
-        </div>
-        <div class="footer-bottom">
-            <p>&copy; <?php echo date('Y'); ?> Furom. All rights reserved.</p>
-            <div class="footer-stats">
-                <span>Page generated in <?php echo round(microtime(true) - $_SERVER['REQUEST_TIME_FLOAT'], 4); ?>s</span>
-                <span>•</span>
-                <span><?php echo number_format(memory_get_peak_usage(true) / 1024 / 1024, 2); ?> MB</span>
-            </div>
+            <?php endif; ?>
         </div>
     </div>
 </footer>
+
+<style>
+.footer-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    text-align: center;
+}
+
+.footer-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.footer-links {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.footer-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.3s ease;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.footer-links a:hover {
+    color: var(--primary);
+    background: rgba(0, 245, 255, 0.1);
+}
+
+.custom-footer-content,
+.admin-footer-content {
+    width: 100%;
+    text-align: center;
+}
+</style>
 
 <!-- Cookie Consent Banner -->
 <?php echo CookieManager::getConsentBanner(); ?>

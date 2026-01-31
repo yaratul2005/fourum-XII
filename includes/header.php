@@ -1,5 +1,6 @@
 <?php
 require_once 'cache-manager.php';
+require_once 'db-functions.php'; // For get_setting and other functions
 
 // Set cache headers for static pages - only if no output has been sent
 if (!defined('NO_CACHE') && !headers_sent()) {
@@ -8,69 +9,79 @@ if (!defined('NO_CACHE') && !headers_sent()) {
     CacheManager::setNoCache();
 }
 // If headers already sent, we silently continue without setting cache headers
+
+// Get admin-controlled header settings
+$header_title = get_setting('header_title', 'FUROM');
+$header_subtitle = get_setting('header_subtitle', 'Futuristic Community Platform');
+$show_header_logo = filter_var(get_setting('show_header_logo', true), FILTER_VALIDATE_BOOLEAN);
+$header_custom_css = get_setting('header_custom_css', '');
+
+// Get appearance settings
+$primary_color = get_site_appearance('primary_color', '#00f5ff');
+$secondary_color = get_site_appearance('secondary_color', '#ff00ff');
+$enable_particles = filter_var(get_site_appearance('enable_particles', true), FILTER_VALIDATE_BOOLEAN);
+$custom_header_html = get_site_appearance('custom_header_html', '');
 ?>
 
 <header class="cyber-header">
     <div class="container">
         <div class="header-content">
-            <!-- Minimal Site Branding -->
+            <!-- Site Branding with Admin Controls -->
             <div class="logo">
-                <h1><i class="fas fa-robot"></i> FUROM</h1>
+                <?php if ($show_header_logo): ?>
+                    <h1><i class="fas fa-robot"></i> <?php echo htmlspecialchars($header_title); ?></h1>
+                <?php else: ?>
+                    <h1><?php echo htmlspecialchars($header_title); ?></h1>
+                <?php endif; ?>
+                <span class="tagline"><?php echo htmlspecialchars($header_subtitle); ?></span>
             </div>
             
-            <!-- Search Box -->
-            <div class="search-container">
-                <form method="GET" action="search.php" class="search-form">
-                    <div class="search-wrapper">
-                        <input type="text" name="q" placeholder="Search discussions..." 
-                               value="<?php echo htmlspecialchars($_GET['q'] ?? ''); ?>"
-                               class="search-input">
-                        <button type="submit" class="search-button">
-                            <i class="fas fa-search"></i>
-                        </button>
-                    </div>
-                </form>
-            </div>
-            
-            <!-- Navigation and Actions -->
-            <div class="header-actions">
-                <nav class="main-nav">
-                    <a href="index.php" class="nav-link <?php echo basename($_SERVER['PHP_SELF']) === 'index.php' ? 'active' : ''; ?>">
-                        <i class="fas fa-home"></i> Home
-                    </a>
-                    <a href="categories.php" class="nav-link <?php echo basename($_SERVER['PHP_SELF']) === 'categories.php' ? 'active' : ''; ?>">
-                        <i class="fas fa-tags"></i> Categories
-                    </a>
-                    <a href="leaderboard.php" class="nav-link <?php echo basename($_SERVER['PHP_SELF']) === 'leaderboard.php' ? 'active' : ''; ?>">
-                        <i class="fas fa-trophy"></i> Leaderboard
-                    </a>
-                </nav>
-                
-                <div class="user-actions">
-                    <?php if (is_logged_in()): ?>
-                        <a href="create-post.php" class="btn btn-primary post-now-btn">
-                            <i class="fas fa-plus"></i> Post Now
-                        </a>
-                        <div class="user-dropdown">
-                            <button class="user-menu-btn">
-                                <img src="<?php echo get_user_data(get_current_user_id())['avatar'] ?: 'assets/images/default-avatar.png'; ?>" 
-                                     alt="Avatar" class="user-avatar">
-                                <span><?php echo htmlspecialchars($_SESSION['username']); ?></span>
-                                <i class="fas fa-chevron-down"></i>
-                            </button>
-                            <div class="dropdown-menu">
-                                <a href="profile.php?id=<?php echo get_current_user_id(); ?>"><i class="fas fa-user"></i> My Profile</a>
-                                <a href="profile-edit.php"><i class="fas fa-user-edit"></i> Edit Profile</a>
-                                <a href="settings.php"><i class="fas fa-cog"></i> Settings</a>
-                                <div class="dropdown-divider"></div>
-                                <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                            </div>
-                        </div>
-                    <?php else: ?>
-                        <a href="login.php" class="btn btn-outline">Login</a>
-                        <a href="register.php" class="btn btn-primary">Register</a>
-                    <?php endif; ?>
+            <!-- Custom Header Content (Admin Controlled) -->
+            <?php if (!empty($custom_header_html)): ?>
+                <div class="custom-header-content">
+                    <?php echo $custom_header_html; ?>
                 </div>
+            <?php endif; ?>
+            
+            <!-- Enhanced Navigation -->
+            <nav class="main-nav">
+                <a href="index.php" class="nav-link <?php echo basename($_SERVER['PHP_SELF']) === 'index.php' ? 'active' : ''; ?>">
+                    <i class="fas fa-home"></i> Home
+                </a>
+                <a href="categories.php" class="nav-link <?php echo basename($_SERVER['PHP_SELF']) === 'categories.php' ? 'active' : ''; ?>">
+                    <i class="fas fa-tags"></i> Categories
+                </a>
+                <?php if (is_logged_in()): ?>
+                    <a href="create-post.php" class="nav-link <?php echo basename($_SERVER['PHP_SELF']) === 'create-post.php' ? 'active' : ''; ?>">
+                        <i class="fas fa-plus-circle"></i> Create Post
+                    </a>
+                <?php endif; ?>
+            </nav>
+            
+            <!-- User Actions -->
+            <div class="user-actions">
+                <?php if (is_logged_in()): ?>
+                    <?php $current_user = get_user_data(get_current_user_id()); ?>
+                    <div class="user-dropdown">
+                        <button class="user-btn">
+                            <img src="<?php echo $current_user['avatar'] ?: 'assets/images/default-avatar.png'; ?>" 
+                                 alt="Avatar" class="avatar-small">
+                            <span class="username"><?php echo htmlspecialchars($current_user['username']); ?></span>
+                            <span class="exp-badge"><?php echo format_number($current_user['exp']); ?> EXP</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="dropdown-menu">
+                            <a href="profile.php?id=<?php echo $current_user['id']; ?>"><i class="fas fa-user"></i> Profile</a>
+                            <?php if (is_admin()): ?>
+                                <a href="admin/"><i class="fas fa-shield-alt"></i> Admin Panel</a>
+                            <?php endif; ?>
+                            <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <a href="login.php" class="btn btn-outline">Login</a>
+                    <a href="register.php" class="btn btn-primary">Register</a>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -81,6 +92,20 @@ if (!defined('NO_CACHE') && !headers_sent()) {
     <div class="loading-spinner"></div>
     <div class="loading-message">Loading Furom...</div>
 </div>
+
+<!-- Particles Background (Admin controlled) -->
+<?php if ($enable_particles): ?>
+<div id="particles-js"></div>
+<?php endif; ?>
+
+<style>
+:root {
+    --primary: <?php echo $primary_color; ?>;
+    --secondary: <?php echo $secondary_color; ?>;
+}
+
+<?php echo $header_custom_css; ?>
+</style>
 
 <script>
 // Global loading state management

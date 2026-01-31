@@ -1,40 +1,50 @@
 <?php
 require_once 'config.php';
-redirect_if_not_logged_in();
+require_once 'includes/functions.php';
 
-$user_id = get_current_user_id();
+$user_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+if (!$user_id) {
+    header('Location: index.php');
+    exit();
+}
+
 $user_data = get_user_data($user_id);
+if (!$user_data) {
+    header('Location: index.php');
+    exit();
+}
 
-// Get user's posts
-$stmt = $pdo->prepare("SELECT p.*, 
-                      (SELECT COUNT(*) FROM comments c WHERE c.post_id = p.id) as comment_count
-                      FROM posts p 
-                      WHERE p.user_id = ? AND p.status = 'active' 
-                      ORDER BY p.created_at DESC LIMIT 10");
-$stmt->execute([$user_id]);
-$user_posts = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// Check if current user can view this profile
+$current_user_id = get_current_user_id();
+$can_edit = ($current_user_id == $user_id);
+$is_admin = is_admin();
 
-// Get user's comments
-$stmt = $pdo->prepare("SELECT c.*, p.title as post_title, p.id as post_id
-                      FROM comments c 
-                      JOIN posts p ON c.post_id = p.id
-                      WHERE c.user_id = ? AND c.status = 'active'
-                      ORDER BY c.created_at DESC LIMIT 10");
-$stmt->execute([$user_id]);
-$user_comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// Get user's KYC status
+$kyc_status = 'not_submitted';
+$kyc_data = null;
 
-// Get EXP statistics
-$stmt = $pdo->prepare("SELECT COUNT(*) as total_posts FROM posts WHERE user_id = ?");
-$stmt->execute([$user_id]);
-$total_posts = $stmt->fetchColumn();
+if ($can_edit || $is_admin) {
+    try {
+        $stmt = $pdo->prepare("SELECT * FROM kyc_submissions WHERE user_id = ? ORDER BY created_at DESC LIMIT 1");
+        $stmt->execute([$user_id]);
+        $kyc_data = $stmt->fetch(PDO::FETCH_ASSOC);
+        $kyc_status = $kyc_data ? $kyc_data['status'] : 'not_submitted';
+    } catch (Exception $e) {
+        // Handle gracefully
+    }
+}
 
-$stmt = $pdo->prepare("SELECT COUNT(*) as total_comments FROM comments WHERE user_id = ?");
+// Get user's posts and activity
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM posts WHERE user_id = ?");
 $stmt->execute([$user_id]);
-$total_comments = $stmt->fetchColumn();
+$post_count = $stmt->fetchColumn();
 
-$stmt = $pdo->prepare("SELECT SUM(amount) as total_exp_gained FROM exp_log WHERE user_id = ?");
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM comments WHERE user_id = ?");
 $stmt->execute([$user_id]);
-$total_exp_gained = $stmt->fetchColumn() ?: 0;
+$comment_count = $stmt->fetchColumn();
+
+// Get user level
+$user_level = get_user_level($user_data['exp']);
 ?>
 
 <!DOCTYPE html>
@@ -45,332 +55,341 @@ $total_exp_gained = $stmt->fetchColumn() ?: 0;
     <title><?php echo htmlspecialchars($user_data['username']); ?>'s Profile - <?php echo SITE_NAME; ?></title>
     <link rel="stylesheet" href="assets/css/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .profile-container {
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        
+        .profile-header {
+            text-align: center;
+            padding: 3rem;
+            background: linear-gradient(135deg, var(--card-bg), var(--darker-bg));
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .profile-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary), var(--primary));
+        }
+        
+        .avatar-large {
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            border: 5px solid var(--primary);
+            box-shadow: 0 0 30px var(--primary);
+            margin: 0 auto 1.5rem;
+            object-fit: cover;
+            transition: all 0.4s ease;
+        }
+        
+        .avatar-large:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 40px var(--primary);
+        }
+        
+        .user-info {
+            margin-bottom: 2rem;
+        }
+        
+        .username-display {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .user-level-badge {
+            display: inline-block;
+            padding: 0.5rem 1.5rem;
+            border-radius: 20px;
+            background: var(--gradient-primary);
+            color: var(--darker-bg);
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin: 0.5rem 0;
+            box-shadow: 0 5px 15px rgba(0, 245, 255, 0.3);
+        }
+        
+        .kyc-status {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 15px;
+            font-weight: 500;
+            margin: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .kyc-not-submitted {
+            background: rgba(255, 204, 0, 0.2);
+            border: 1px solid var(--warning);
+            color: var(--warning);
+        }
+        
+        .kyc-pending {
+            background: rgba(0, 245, 255, 0.2);
+            border: 1px solid var(--primary);
+            color: var(--primary);
+        }
+        
+        .kyc-approved {
+            background: rgba(0, 255, 157, 0.2);
+            border: 1px solid var(--success);
+            color: var(--success);
+        }
+        
+        .kyc-rejected {
+            background: rgba(255, 71, 87, 0.2);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
+        
+        .stat-card {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 1.5rem;
+            text-align: center;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .profile-content {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 2rem;
+        }
+        
+        .main-content {
+            background: var(--card-bg);
+            border-radius: 15px;
+            padding: 2rem;
+            border: 1px solid var(--border-color);
+        }
+        
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        
+        .bio-section {
+            margin-bottom: 2rem;
+        }
+        
+        .bio-content {
+            background: rgba(18, 18, 37, 0.5);
+            border-radius: 10px;
+            padding: 1.5rem;
+            border-left: 3px solid var(--primary);
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .profile-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .username-display {
+                font-size: 2rem;
+            }
+            
+            .avatar-large {
+                width: 120px;
+                height: 120px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
 </head>
 <body>
-    <!-- Header -->
-    <header class="cyber-header">
-        <div class="container">
-            <div class="header-content">
-                <div class="logo">
-                    <h1><i class="fas fa-robot"></i> FUROM</h1>
-                    <span class="tagline">Futuristic Community Platform</span>
-                </div>
-                <nav class="main-nav">
-                    <a href="index.php" class="nav-link">Home</a>
-                </nav>
-                <div class="user-actions">
-                    <div class="user-dropdown">
-                        <button class="user-btn">
-                            <img src="<?php echo $user_data['avatar'] ?: 'assets/images/default-avatar.png'; ?>" 
-                                 alt="Avatar" class="avatar-small">
-                            <span class="username"><?php echo $user_data['username']; ?></span>
-                            <span class="exp-badge"><?php echo format_number($user_data['exp']); ?> EXP</span>
-                            <i class="fas fa-chevron-down"></i>
-                        </button>
-                        <div class="dropdown-menu">
-                            <a href="create-post.php"><i class="fas fa-plus"></i> Create Post</a>
-                            <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </header>
-
-    <!-- Main Content -->
+    <?php include 'includes/header.php'; ?>
+    
     <main class="main-container">
         <div class="container">
-            <!-- Profile Header -->
-            <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 15px; padding: 2rem; margin-bottom: 2rem;">
-                <div style="display: flex; align-items: center; gap: 2rem; flex-wrap: wrap;">
-                    <img src="<?php echo $user_data['avatar'] ?: 'assets/images/default-avatar.png'; ?>" 
-                         alt="Profile Avatar" 
-                         style="width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--primary); object-fit: cover;">
-                    
-                    <div style="flex: 1;">
-                        <h1 style="font-family: 'Orbitron', monospace; color: var(--primary); margin-bottom: 0.5rem;">
-                            u/<?php echo htmlspecialchars($user_data['username']); ?>
-                        </h1>
-                        <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
-                            <span style="background: linear-gradient(45deg, var(--secondary), var(--accent)); padding: 0.5rem 1rem; border-radius: 20px; font-weight: 600; color: white;">
-                                <?php echo get_user_level($user_data['exp']); ?>
-                            </span>
-                            <span style="background: rgba(0, 245, 255, 0.2); padding: 0.5rem 1rem; border-radius: 20px; color: var(--primary);">
-                                <i class="fas fa-bolt"></i> <?php echo format_number($user_data['exp']); ?> EXP
-                            </span>
-                        </div>
+            <div class="profile-container">
+                <div class="profile-header">
+                    <img src="<?php echo !empty($user_data['avatar']) ? htmlspecialchars($user_data['avatar']) : 'assets/images/default-avatar.png'; ?>" 
+                         alt="Avatar" class="avatar-large">
+                    <div class="user-info">
+                        <h1 class="username-display"><?php echo htmlspecialchars($user_data['username']); ?></h1>
+                        <div class="user-level-badge"><?php echo $user_level['name']; ?></div>
                         
-                        <?php if ($user_data['bio']): ?>
-                            <p style="color: var(--text-secondary); line-height: 1.6; max-width: 600px;">
-                                <?php echo htmlspecialchars($user_data['bio']); ?>
-                            </p>
+                        <?php if ($can_edit || $is_admin): ?>
+                            <div class="kyc-status kyc-<?php echo $kyc_status; ?>">
+                                <?php 
+                                switch($kyc_status) {
+                                    case 'approved':
+                                        echo '<i class="fas fa-check-circle"></i> Verified';
+                                        break;
+                                    case 'pending':
+                                        echo '<i class="fas fa-clock"></i> Verification Pending';
+                                        break;
+                                    case 'rejected':
+                                        echo '<i class="fas fa-times-circle"></i> Verification Rejected';
+                                        break;
+                                    default:
+                                        echo '<i class="fas fa-id-card"></i> Not Verified';
+                                }
+                                ?>
+                            </div>
                         <?php endif; ?>
                         
-                        <div style="display: flex; gap: 2rem; margin-top: 1rem; color: var(--text-secondary); flex-wrap: wrap;">
-                            <span><i class="fas fa-calendar-alt"></i> Joined <?php echo date('M Y', strtotime($user_data['created_at'])); ?></span>
-                            <span><i class="fas fa-sign-in-alt"></i> Last seen <?php echo time_elapsed_string($user_data['last_login'] ?? $user_data['created_at']); ?></span>
-                            <?php if ($user_data['verified']): ?>
-                                <span style="color: var(--success);"><i class="fas fa-badge-check"></i> Verified</span>
+                        <p style="color: var(--text-secondary); margin-top: 1rem;">
+                            Member since <?php echo date('F Y', strtotime($user_data['created_at'])); ?>
+                        </p>
+                    </div>
+                    
+                    <?php if ($can_edit): ?>
+                        <div class="action-buttons">
+                            <a href="profile-edit.php" class="btn btn-primary">
+                                <i class="fas fa-edit"></i> Edit Profile
+                            </a>
+                            
+                            <?php if ($kyc_status === 'not_submitted' || $kyc_status === 'rejected'): ?>
+                                <a href="kyc-submit.php" class="btn btn-outline">
+                                    <i class="fas fa-id-card"></i> Get Verified
+                                </a>
+                            <?php elseif ($kyc_status === 'pending'): ?>
+                                <a href="kyc-status.php" class="btn btn-outline">
+                                    <i class="fas fa-hourglass-half"></i> View Submission Status
+                                </a>
+                            <?php elseif ($kyc_status === 'approved'): ?>
+                                <span class="btn btn-success" style="opacity: 0.7; cursor: default;">
+                                    <i class="fas fa-check"></i> Already Verified
+                                </span>
                             <?php endif; ?>
                         </div>
+                    <?php endif; ?>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo format_number($user_data['exp']); ?></div>
+                        <div class="stat-label">Experience Points</div>
                     </div>
-                    
-                    <div style="text-align: center; min-width: 200px;">
-                        <div style="margin-top: 1rem; padding: 1rem; background: rgba(0, 0, 0, 0.2); border-radius: 10px;">
-                            <h4 style="color: var(--primary); margin-bottom: 0.5rem;">Achievements</h4>
-                            <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
-                                <?php if ($total_posts >= 1): ?>
-                                    <i class="fas fa-first-post" title="First Post" style="color: var(--success);"></i>
-                                <?php endif; ?>
-                                <?php if ($user_data['exp'] >= 100): ?>
-                                    <i class="fas fa-medal" title="Level 2 Achieved" style="color: var(--warning);"></i>
-                                <?php endif; ?>
-                                <?php if ($total_comments >= 10): ?>
-                                    <i class="fas fa-comments" title="10+ Comments" style="color: var(--primary);"></i>
-                                <?php endif; ?>
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo $post_count; ?></div>
+                        <div class="stat-label">Posts Created</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo $comment_count; ?></div>
+                        <div class="stat-label">Comments</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo $user_level['level']; ?></div>
+                        <div class="stat-label">User Level</div>
+                    </div>
+                </div>
+                
+                <div class="profile-content">
+                    <div class="main-content">
+                        <?php if (!empty($user_data['bio'])): ?>
+                            <div class="bio-section">
+                                <h3><i class="fas fa-user-circle"></i> About Me</h3>
+                                <div class="bio-content">
+                                    <?php echo nl2br(htmlspecialchars($user_data['bio'])); ?>
+                                </div>
                             </div>
+                        <?php endif; ?>
+                        
+                        <?php if (!empty($user_data['location'])): ?>
+                            <div class="bio-section">
+                                <h3><i class="fas fa-map-marker-alt"></i> Location</h3>
+                                <div class="bio-content">
+                                    <?php echo htmlspecialchars($user_data['location']); ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <?php if (!empty($user_data['website'])): ?>
+                            <div class="bio-section">
+                                <h3><i class="fas fa-link"></i> Website</h3>
+                                <div class="bio-content">
+                                    <a href="<?php echo htmlspecialchars($user_data['website']); ?>" target="_blank" rel="noopener noreferrer">
+                                        <?php echo htmlspecialchars($user_data['website']); ?>
+                                    </a>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                    
+                    <div class="sidebar">
+                        <?php if ($is_admin): ?>
+                            <div class="widget">
+                                <h3><i class="fas fa-tools"></i> Admin Actions</h3>
+                                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <a href="admin/?page=users&action=edit&id=<?php echo $user_id; ?>" class="btn btn-outline" style="text-align: center;">
+                                        <i class="fas fa-user-edit"></i> Edit User
+                                    </a>
+                                    <?php if ($kyc_data): ?>
+                                        <a href="admin/?page=kyc&action=view&id=<?php echo $kyc_data['id']; ?>" class="btn btn-outline" style="text-align: center;">
+                                            <i class="fas fa-id-card"></i> Review KYC
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                        
+                        <div class="widget">
+                            <h3><i class="fas fa-trophy"></i> Achievements</h3>
+                            <p style="color: var(--text-secondary); font-style: italic;">
+                                Coming soon...
+                            </p>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Stats Overview -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-                <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 15px; padding: 1.5rem; text-align: center;">
-                    <i class="fas fa-file-alt fa-2x" style="color: var(--primary); margin-bottom: 1rem;"></i>
-                    <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;"><?php echo $total_posts; ?></h3>
-                    <p style="color: var(--text-secondary);">Posts Created</p>
-                </div>
-                
-                <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 15px; padding: 1.5rem; text-align: center;">
-                    <i class="fas fa-comment fa-2x" style="color: var(--secondary); margin-bottom: 1rem;"></i>
-                    <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;"><?php echo $total_comments; ?></h3>
-                    <p style="color: var(--text-secondary);">Comments Made</p>
-                </div>
-                
-                <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 15px; padding: 1.5rem; text-align: center;">
-                    <i class="fas fa-chart-line fa-2x" style="color: var(--accent); margin-bottom: 1rem;"></i>
-                    <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;"><?php echo format_number($total_exp_gained); ?></h3>
-                    <p style="color: var(--text-secondary);">Total EXP Gained</p>
-                </div>
-                
-                <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 15px; padding: 1.5rem; text-align: center;">
-                    <i class="fas fa-trophy fa-2x" style="color: var(--warning); margin-bottom: 1rem;"></i>
-                    <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;"><?php echo get_user_level($user_data['exp']); ?></h3>
-                    <p style="color: var(--text-secondary);">Current Level</p>
-                </div>
-            </div>
-
-            <!-- Recent Activity Tabs -->
-            <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 15px; overflow: hidden;">
-                <div style="display: flex; border-bottom: 1px solid var(--border-color);">
-                    <button class="tab-btn active" data-tab="posts" style="flex: 1; padding: 1rem; background: transparent; border: none; color: var(--primary); font-weight: 500; cursor: pointer;">
-                        <i class="fas fa-file-alt"></i> Recent Posts
-                    </button>
-                    <button class="tab-btn" data-tab="comments" style="flex: 1; padding: 1rem; background: transparent; border: none; color: var(--text-secondary); font-weight: 500; cursor: pointer;">
-                        <i class="fas fa-comment"></i> Recent Comments
-                    </button>
-                    <button class="tab-btn" data-tab="exp" style="flex: 1; padding: 1rem; background: transparent; border: none; color: var(--text-secondary); font-weight: 500; cursor: pointer;">
-                        <i class="fas fa-history"></i> EXP History
-                    </button>
-                </div>
-                
-                <!-- Posts Tab -->
-                <div class="tab-content active" id="posts-tab" style="padding: 1.5rem;">
-                    <?php if (empty($user_posts)): ?>
-                        <div class="empty-state">
-                            <i class="fas fa-file-alt fa-3x"></i>
-                            <h3>No posts yet</h3>
-                            <p>Start sharing your thoughts with the community!</p>
-                            <a href="create-post.php" class="btn btn-primary">Create Your First Post</a>
-                        </div>
-                    <?php else: ?>
-                        <div style="display: flex; flex-direction: column; gap: 1rem;">
-                            <?php foreach($user_posts as $post): ?>
-                                <div style="background: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 1rem; border-left: 3px solid var(--primary);">
-                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
-                                        <h4 style="color: var(--text-primary); margin: 0;">
-                                            <a href="post.php?id=<?php echo $post['id']; ?>" style="color: inherit; text-decoration: none;">
-                                                <?php echo htmlspecialchars($post['title']); ?>
-                                            </a>
-                                        </h4>
-                                        <span style="color: var(--text-secondary); font-size: 0.9rem;">
-                                            <?php echo time_elapsed_string($post['created_at']); ?>
-                                        </span>
-                                    </div>
-                                    <div style="display: flex; gap: 1rem; color: var(--text-secondary); font-size: 0.9rem;">
-                                        <span><i class="fas fa-arrow-up"></i> <?php echo $post['score']; ?> votes</span>
-                                        <span><i class="fas fa-comment"></i> <?php echo $post['comment_count']; ?> comments</span>
-                                        <span><i class="fas fa-eye"></i> <?php echo format_number($post['views']); ?> views</span>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                
-                <!-- Comments Tab -->
-                <div class="tab-content" id="comments-tab" style="padding: 1.5rem; display: none;">
-                    <?php if (empty($user_comments)): ?>
-                        <div class="empty-state">
-                            <i class="fas fa-comment fa-3x"></i>
-                            <h3>No comments yet</h3>
-                            <p>Join discussions by commenting on posts!</p>
-                        </div>
-                    <?php else: ?>
-                        <div style="display: flex; flex-direction: column; gap: 1rem;">
-                            <?php foreach($user_comments as $comment): ?>
-                                <div style="background: rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 1rem; border-left: 3px solid var(--secondary);">
-                                    <div style="margin-bottom: 0.5rem;">
-                                        <a href="post.php?id=<?php echo $comment['post_id']; ?>" style="color: var(--primary); text-decoration: none; font-weight: 500;">
-                                            <i class="fas fa-reply"></i> Re: <?php echo htmlspecialchars($comment['post_title']); ?>
-                                        </a>
-                                    </div>
-                                    <p style="color: var(--text-secondary); margin: 0.5rem 0; line-height: 1.6;">
-                                        <?php echo htmlspecialchars(substr($comment['content'], 0, 200)); ?>...
-                                    </p>
-                                    <div style="color: var(--text-secondary); font-size: 0.9rem;">
-                                        <?php echo time_elapsed_string($comment['created_at']); ?>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                
-                <!-- EXP History Tab -->
-                <div class="tab-content" id="exp-tab" style="padding: 1.5rem; display: none;">
-                    <?php
-                    $stmt = $pdo->prepare("SELECT * FROM exp_log WHERE user_id = ? ORDER BY created_at DESC LIMIT 20");
-                    $stmt->execute([$user_id]);
-                    $exp_history = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                    ?>
-                    
-                    <?php if (empty($exp_history)): ?>
-                        <div class="empty-state">
-                            <i class="fas fa-history fa-3x"></i>
-                            <h3>No EXP history yet</h3>
-                            <p>Earn EXP by participating in the community!</p>
-                        </div>
-                    <?php else: ?>
-                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                            <?php foreach($exp_history as $record): ?>
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: rgba(255, 255, 255, 0.05); border-radius: 8px;">
-                                    <div>
-                                        <span style="color: var(--text-primary); font-weight: 500;"><?php echo htmlspecialchars($record['reason']); ?></span>
-                                        <br>
-                                        <span style="color: var(--text-secondary); font-size: 0.9rem;"><?php echo time_elapsed_string($record['created_at']); ?></span>
-                                    </div>
-                                    <span style="font-weight: 600; font-size: 1.1rem; <?php echo $record['amount'] > 0 ? 'color: var(--success)' : 'color: var(--danger)'; ?>">
-                                        <?php echo ($record['amount'] > 0 ? '+' : '') . $record['amount']; ?> EXP
-                                    </span>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
                 </div>
             </div>
         </div>
     </main>
-
-    <!-- Edit Profile Modal -->
-    <div id="edit-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; align-items: center; justify-content: center;">
-        <div style="background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 15px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; position: relative;">
-            <div style="padding: 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
-                <h3><i class="fas fa-edit"></i> Edit Profile</h3>
-                <button onclick="closeEditModal()" style="background: none; border: none; color: var(--text-primary); font-size: 1.5rem; cursor: pointer;">&times;</button>
-            </div>
-            <form id="edit-profile-form" style="padding: 1.5rem;">
-                <div class="form-group">
-                    <label class="form-label">Bio</label>
-                    <textarea name="bio" class="form-textarea" placeholder="Tell us about yourself..." maxlength="500"><?php echo htmlspecialchars($user_data['bio'] ?? ''); ?></textarea>
-                    <small style="color: var(--text-secondary); font-size: 0.8rem;">Maximum 500 characters</small>
-                </div>
-                <div class="form-group">
-                    <button type="submit" class="btn btn-primary" style="width: 100%;">
-                        <i class="fas fa-save"></i> Save Changes
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Footer -->
-    <footer class="cyber-footer">
-        <div class="container">
-            <div class="footer-bottom">
-                <p>&copy; <?php echo date('Y'); ?> Furom. All rights reserved.</p>
-            </div>
-        </div>
-    </footer>
-
-    <script src="assets/js/main.js"></script>
-    <script>
-        // Tab switching
-        document.querySelectorAll('.tab-btn').forEach(button => {
-            button.addEventListener('click', function() {
-                // Remove active class from all buttons and tabs
-                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-                document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-                
-                // Add active class to clicked button
-                this.classList.add('active');
-                
-                // Show corresponding tab
-                const tabId = this.dataset.tab + '-tab';
-                document.getElementById(tabId).classList.add('active');
-                document.getElementById(tabId).style.display = 'block';
-            });
-        });
-        
-        // Edit profile modal
-        function showEditModal() {
-            document.getElementById('edit-modal').style.display = 'flex';
-        }
-        
-        function closeEditModal() {
-            document.getElementById('edit-modal').style.display = 'none';
-        }
-        
-        // Close modal when clicking outside
-        document.getElementById('edit-modal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeEditModal();
-            }
-        });
-        
-        // Profile update form
-        document.getElementById('edit-profile-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const formData = new FormData(this);
-            const submitBtn = this.querySelector('button[type="submit"]');
-            const originalText = submitBtn.innerHTML;
-            
-            submitBtn.innerHTML = '<div class="loading"></div> Saving...';
-            submitBtn.disabled = true;
-            
-            fetch('ajax/update-profile.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showNotification('Profile updated successfully!', 'success');
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showNotification(data.message || 'Failed to update profile', 'error');
-                }
-            })
-            .catch(error => {
-                showNotification('Network error occurred', 'error');
-            })
-            .finally(() => {
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
-            });
-        });
-    </script>
+    
+    <?php include 'includes/footer.php'; ?>
 </body>
 </html>
