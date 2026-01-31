@@ -1,12 +1,13 @@
 <?php
 require_once 'cache-manager.php';
 
-// Set cache headers for static pages
-if (!defined('NO_CACHE')) {
+// Set cache headers for static pages - only if no output has been sent
+if (!defined('NO_CACHE') && !headers_sent()) {
     CacheManager::setBrowserCache(3600, true); // Cache for 1 hour
-} else {
+} elseif (defined('NO_CACHE') && !headers_sent()) {
     CacheManager::setNoCache();
 }
+// If headers already sent, we silently continue without setting cache headers
 ?>
 
 <header class="cyber-header">

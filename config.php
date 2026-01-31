@@ -49,6 +49,6 @@ if (session_status() == PHP_SESSION_NONE) {
 // Set timezone
 date_default_timezone_set('UTC');
 
-// Flush output buffer
-ob_end_flush();
+// Don't flush output buffer here - let individual scripts control when to send output
+// ob_end_flush(); // Removed to prevent premature header sending
 ?>

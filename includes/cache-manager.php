@@ -2,6 +2,7 @@
 /**
  * Smart Cache Manager for Furom
  * Handles browser caching, asset optimization, and loading states
+ * Defensive version that gracefully handles header issues
  */
 
 class CacheManager {
@@ -90,21 +91,79 @@ class CacheManager {
     }
     
     /**
-     * Set browser cache headers
+     * Set browser cache headers defensively
      */
     public static function setBrowserCache($max_age = 3600, $public = true) {
-        $cache_control = $public ? 'public' : 'private';
-        header("Cache-Control: {$cache_control}, max-age={$max_age}");
-        header('Expires: ' . gmdate('D, d M Y H:i:s', time() + $max_age) . ' GMT');
+        // Multiple checks to prevent header errors
+        if (headers_sent($file, $line)) {
+            error_log("Headers already sent in $file at line $line - cannot set cache headers");
+            return false;
+        }
+        
+        if (ob_get_level() > 0) {
+            // There's output buffering, but headers might still be sendable
+            $contents = ob_get_contents();
+            if ($contents !== '' && $contents !== false) {
+                error_log("Output buffering contains content - headers may be problematic");
+                // Still attempt to set headers but be prepared for failure
+            }
+        }
+        
+        try {
+            $cache_control = $public ? 'public' : 'private';
+            header("Cache-Control: {$cache_control}, max-age={$max_age}", true);
+            header('Expires: ' . gmdate('D, d M Y H:i:s', time() + $max_age) . ' GMT', true);
+            return true;
+        } catch (Exception $e) {
+            error_log("Failed to set cache headers: " . $e->getMessage());
+            return false;
+        }
     }
     
     /**
-     * Set no-cache headers
+     * Set no-cache headers defensively
      */
     public static function setNoCache() {
-        header('Cache-Control: no-cache, no-store, must-revalidate');
-        header('Pragma: no-cache');
-        header('Expires: 0');
+        // Multiple checks to prevent header errors
+        if (headers_sent($file, $line)) {
+            error_log("Headers already sent in $file at line $line - cannot set no-cache headers");
+            return false;
+        }
+        
+        if (ob_get_level() > 0) {
+            $contents = ob_get_contents();
+            if ($contents !== '' && $contents !== false) {
+                error_log("Output buffering contains content - no-cache headers may be problematic");
+            }
+        }
+        
+        try {
+            header('Cache-Control: no-cache, no-store, must-revalidate', true);
+            header('Pragma: no-cache', true);
+            header('Expires: 0', true);
+            return true;
+        } catch (Exception $e) {
+            error_log("Failed to set no-cache headers: " . $e->getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Safe header setting with fallback
+     */
+    public static function safeHeader($header, $replace = true) {
+        if (headers_sent($file, $line)) {
+            error_log("Cannot set header '$header' - headers already sent in $file at line $line");
+            return false;
+        }
+        
+        try {
+            header($header, $replace);
+            return true;
+        } catch (Exception $e) {
+            error_log("Failed to set header '$header': " . $e->getMessage());
+            return false;
+        }
     }
 }
 

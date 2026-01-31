@@ -1,5 +1,8 @@
 <?php
 // Enhanced Profile Editor with Improved Image Upload and Validation
+// Define NO_CACHE to prevent cache headers on this page
+define('NO_CACHE', true);
+
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
@@ -198,7 +201,8 @@ try {
     $message_type = 'error';
 }
 
-ob_end_flush();
+// Don't flush output buffer yet - let header handle cache settings first
+// ob_end_flush(); // Moved to after HTML output
 ?>
 
 <!DOCTYPE html>
@@ -668,6 +672,9 @@ ob_end_flush();
 </html>
 
 <?php
+// Flush output buffer after HTML is complete
+ob_end_flush();
+
 function handle_avatar_upload_improved($file, $user_id) {
     global $pdo;
     

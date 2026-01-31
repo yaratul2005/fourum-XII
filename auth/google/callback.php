@@ -3,7 +3,8 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-session_start();
+// Session will be started in config.php
+// session_start(); // Removed to prevent conflict
 
 try {
     require_once '../../config.php';
@@ -143,10 +144,8 @@ try {
     }
     
 } catch (Exception $e) {
-    error_log("Google OAuth error: " . $e->getMessage());
-    $_SESSION['error_message'] = $e->getMessage();
-    header('Location: /login.php?error=google_auth_failed');
-    exit();
+    error_log("Google OAuth callback error: " . $e->getMessage());
+    // Handle error appropriately
 }
 
 function get_google_config() {
