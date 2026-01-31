@@ -99,24 +99,15 @@ body::before {
     padding: 0 20px;
 }
 
-/* Enhanced Header with Glowing Effects */
+/* Header Styles - Fixed for proper responsiveness */
 .cyber-header {
     background: linear-gradient(135deg, var(--darker-bg) 0%, var(--dark-bg) 100%);
     border-bottom: 1px solid var(--border-color);
-    position: sticky;
-    top: 0;
+    position: relative; /* Changed from sticky to relative for scrollability */
+    width: 100%;
     z-index: 1000;
     backdrop-filter: blur(15px);
-    box-shadow: 
-        0 5px 20px rgba(0, 0, 0, 0.5),
-        0 0 30px rgba(0, 245, 255, 0.1);
-    transition: var(--transition-medium);
-}
-
-.cyber-header:hover {
-    box-shadow: 
-        0 8px 30px rgba(0, 0, 0, 0.6),
-        0 0 50px rgba(0, 245, 255, 0.2);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
 }
 
 .header-content {
@@ -124,58 +115,42 @@ body::before {
     justify-content: space-between;
     align-items: center;
     padding: 1rem 0;
-    transition: var(--transition-medium);
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
-/* Animated Logo */
 .logo {
-    position: relative;
-    transition: var(--transition-medium);
-}
-
-.logo:hover {
-    transform: scale(1.05);
+    flex-shrink: 0;
 }
 
 .logo h1 {
     font-family: 'Orbitron', monospace;
-    font-size: 2.2rem;
+    font-size: 2rem;
     font-weight: 700;
-    background: var(--gradient-primary);
+    background: linear-gradient(45deg, var(--primary), var(--secondary));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
     text-shadow: var(--neon-glow);
     margin-bottom: 0.25rem;
-    position: relative;
-    animation: pulseGlow 3s infinite alternate;
 }
 
-@keyframes pulseGlow {
-    0% { text-shadow: var(--neon-glow); }
-    100% { text-shadow: 0 0 20px var(--primary), 0 0 40px var(--primary), 0 0 60px var(--primary); }
-}
-
-.logo .tagline {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    animation: fadeIn 2s ease-in-out;
-}
-
-@keyframes fadeIn {
-    0% { opacity: 0; transform: translateY(10px); }
-    100% { opacity: 1; transform: translateY(0); }
-}
-
-/* Enhanced Navigation with Hover Effects */
 .main-nav {
     display: flex;
     gap: 1.5rem;
-    position: relative;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
+.user-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+/* Enhanced Navigation with Hover Effects */
 .nav-link {
     color: var(--text-secondary);
     text-decoration: none;
@@ -222,12 +197,6 @@ body::before {
 }
 
 /* Enhanced User Actions */
-.user-actions {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-}
-
 .btn {
     padding: 0.85rem 1.75rem;
     border-radius: 30px;
@@ -1838,5 +1807,93 @@ body::before {
     
     .upgrade-notice small {
         font-size: 0.8rem;
+    }
+}
+
+/* Footer Styles - Enhanced responsiveness */
+.cyber-footer {
+    background: linear-gradient(135deg, var(--darker-bg) 0%, var(--dark-bg) 100%);
+    border-top: 1px solid var(--border-color);
+    padding: 2rem 0;
+    margin-top: 3rem;
+    width: 100%;
+}
+
+.footer-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 2rem;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* Mobile Responsive Adjustments */
+@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+        text-align: center;
+        gap: 1.5rem;
+    }
+    
+    .logo h1 {
+        font-size: 1.8rem;
+    }
+    
+    .main-nav {
+        order: 2;
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .user-actions {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .logo {
+        order: 1;
+        width: 100%;
+    }
+    
+    .footer-content {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        padding: 0 15px;
+    }
+    
+    .container {
+        padding: 0 15px;
+    }
+}
+
+@media (max-width: 480px) {
+    .logo h1 {
+        font-size: 1.5rem;
+    }
+    
+    .main-nav {
+        gap: 1rem;
+    }
+    
+    .nav-link {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+    }
+    
+    .user-actions {
+        gap: 0.5rem;
+    }
+    
+    .btn {
+        padding: 0.6rem 1.2rem;
+        font-size: 0.9rem;
+    }
+    
+    .footer-content {
+        padding: 0 10px;
+        gap: 1rem;
     }
 }

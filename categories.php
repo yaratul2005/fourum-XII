@@ -2,7 +2,6 @@
 // Categories Page - User Created Categories
 require_once 'config.php';
 require_once 'includes/functions.php';
-require_once 'includes/notifications.php';
 
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
@@ -45,38 +44,23 @@ if (isset($_POST['create_category']) && $current_user) {
             throw new Exception('A category with this name already exists');
         }
         
-        // Check KYC requirement
-        $kyc_required = get_setting('kyc_required_for_categories', '1') === '1';
-        if ($kyc_required && $current_user['kyc_status'] !== 'verified') {
+        // Check KYC requirement for verified users only
+        $kyc_required = get_setting('kyc_required_for_categories', '0') === '1';
+        if ($kyc_required && (!isset($current_user['kyc_status']) || $current_user['kyc_status'] !== 'verified')) {
             throw new Exception('You need to be KYC verified to create categories');
         }
         
-        // Insert category
-        $stmt = $pdo->prepare("INSERT INTO categories (name, description, color, icon, created_by) VALUES (?, ?, ?, ?, ?)");
+        // Insert category directly as active
+        $stmt = $pdo->prepare("INSERT INTO categories (name, description, color, icon, created_by, status) VALUES (?, ?, ?, ?, ?, 'active')");
         $stmt->execute([$name, $description, $color, $icon, $current_user['id']]);
         
         $category_id = $pdo->lastInsertId();
         
-        // Auto-approve if user meets criteria
-        $auto_approve_threshold = (int)get_setting('category_auto_approve_exp', '1000');
-        $approval_required = get_setting('category_approval_required', '1') === '1';
+        // Award EXP for creating category
+        award_exp($current_user['id'], 50, "Created category: $name");
         
-        if (!$approval_required || $current_user['exp'] >= $auto_approve_threshold) {
-            $stmt = $pdo->prepare("UPDATE categories SET status = 'active' WHERE id = ?");
-            $stmt->execute([$category_id]);
-            
-            // Award EXP for creating category
-            award_exp($current_user['id'], EXP_CATEGORY_CREATE, "Created category: $name");
-            
-            $message = "Category '$name' created and activated successfully!";
-            $message_type = 'success';
-        } else {
-            $message = "Category '$name' submitted for review. It will be activated after admin approval.";
-            $message_type = 'info';
-        }
-        
-        // Create notification
-        create_notification($current_user['id'], 'category_created', "Category '$name' created successfully", "/categories.php");
+        $message = "Category '$name' created successfully!";
+        $message_type = 'success';
         
     } catch (Exception $e) {
         $errors[] = $e->getMessage();
@@ -456,7 +440,7 @@ foreach ($categories as $category) {
                 </div>
                 
                 <!-- KYC Requirement Notice -->
-                <?php if ($current_user && get_setting('kyc_required_for_categories', '1') === '1' && $current_user['kyc_status'] !== 'verified'): ?>
+                <?php if ($current_user && get_setting('kyc_required_for_categories', '0') === '1' && (!isset($current_user['kyc_status']) || $current_user['kyc_status'] !== 'verified')): ?>
                     <div class="kyc-requirement">
                         <h3><i class="fas fa-id-card"></i> KYC Verification Required</h3>
                         <p>You need to be KYC verified to create categories. This helps maintain community quality.</p>
@@ -504,7 +488,7 @@ foreach ($categories as $category) {
                                 
                                 <div class="category-meta">
                                     <div>
-                                        Created by <strong><?php echo htmlspecialchars($category['creator_name']); ?></strong>
+                                        Created by <strong><?php echo htmlspecialchars($category['creator_name'] ?? 'System'); ?></strong>
                                     </div>
                                     <div class="meta-item">
                                         <i class="fas fa-calendar"></i>
@@ -523,6 +507,59 @@ foreach ($categories as $category) {
             </div>
         </div>
     </main>
+    
+    <!-- Create Category Modal -->
+    <?php if ($current_user): ?>
+        <div class="modal" id="createCategoryModal">
+            <div class="modal-content">
+                <button class="close-modal" onclick="closeCreateModal()">&times;</button>
+                <h2>Create New Category</h2>
+                <form method="POST" id="createCategoryForm">
+                    <div class="form-group">
+                        <label for="category_name">Category Name *</label>
+                        <input type="text" id="category_name" name="category_name" class="form-input" required maxlength="50">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="category_description">Description</label>
+                        <textarea id="category_description" name="category_description" class="form-textarea" 
+                                  maxlength="500" placeholder="Describe your category..."></textarea>
+                        <small id="desc-count">0/500 characters</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="category_color">Color</label>
+                        <input type="color" id="category_color" name="category_color" class="form-input" value="#007bff">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="category_icon">Icon</label>
+                        <select id="category_icon" name="category_icon" class="form-select">
+                            <option value="folder">Folder</option>
+                            <option value="comments">Comments</option>
+                            <option value="users">Users</option>
+                            <option value="gamepad">Gaming</option>
+                            <option value="music">Music</option>
+                            <option value="film">Movies</option>
+                            <option value="book">Books</option>
+                            <option value="laptop">Technology</option>
+                            <option value="utensils">Food</option>
+                            <option value="heart">Health</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <button type="submit" name="create_category" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Create Category
+                        </button>
+                        <button type="button" class="btn btn-outline" onclick="closeCreateModal()">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    <?php endif; ?>
     
     <?php include 'includes/footer.php'; ?>
     
@@ -560,11 +597,28 @@ foreach ($categories as $category) {
             window.location.href = url.toString();
         }
         
+        // Modal functionality
         function openCreateModal() {
-            // This would open a modal for category creation
-            // For now, we'll just redirect to a create page or show an inline form
-            alert('Category creation functionality would open here!');
+            document.getElementById('createCategoryModal').classList.add('active');
         }
+        
+        function closeCreateModal() {
+            document.getElementById('createCategoryModal').classList.remove('active');
+        }
+        
+        // Character counter for description
+        document.getElementById('category_description')?.addEventListener('input', function() {
+            const count = this.value.length;
+            document.getElementById('desc-count').textContent = `${count}/500 characters`;
+        });
+        
+        // Close modal when clicking outside
+        document.addEventListener('click', function(e) {
+            const modal = document.getElementById('createCategoryModal');
+            if (e.target === modal) {
+                closeCreateModal();
+            }
+        });
     </script>
 </body>
 </html>
