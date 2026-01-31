@@ -1,8 +1,11 @@
 <?php
+// Enable output buffering to prevent header issues
+ob_start();
+
 // Database Configuration - UPDATE THESE VALUES WITH YOUR CPANEL CREDENTIALS
 define('DB_HOST', 'localhost');
 define('DB_USER', 'greatxyz_admin'); // Replace with your cPanel username + _admin
-define('DB_PASS', 'your_actual_password'); // Replace with your actual database password
+define('DB_PASS', 'c(sYbk1;hlCwRQo!'); // Replace with your actual database password
 define('DB_NAME', 'greatxyz_admin'); // Replace with your actual database name
 
 // Site Configuration
@@ -48,4 +51,7 @@ try {
     error_log("Database connection failed: " . $e->getMessage());
     die("Database connection error. Please check configuration.");
 }
+
+// Flush output buffer
+ob_end_flush();
 ?>
